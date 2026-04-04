@@ -262,3 +262,18 @@ y_test  <- as.integer(test$Sentiment) - 1
 # ============================================================
 table(y_train)
 table(y_test)
+
+# ============================================================
+# 25) Making MAE metric
+# ============================================================
+metric_ordinal_mae <- custom_metric(
+  "ordinal_mae",
+  function(y_true, y_pred){
+    # Return the indices of the highest predicted class from the softmax output 
+    y_pred_class <- op_cast(op_argmax(y_pred, axis=-1), "float32")
+    # Reshape y_true into a 1D tensor to match the shape of predicted classes 
+    y_true <- op_cast(op_reshape(y_true, shape = c(-1)), "float32") 
+    # Compute the average absolute error between true and predicted classes 
+    op_mean(op_abs(y_true - y_pred_class))
+  }
+)
