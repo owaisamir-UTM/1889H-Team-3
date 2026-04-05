@@ -257,7 +257,7 @@ metric_ordinal_mae <- custom_metric(
     y_pred_class <- op_cast(op_argmax(y_pred, axis = -1L), "float32")
     
     # Keep original version of y_true handling
-    y_true_class <- op_cast(op_argmax(y_true, axis = -1L), "float32")
+    y_true_class <- op_cast(y_true, "float32")
     
     # Mean absolute difference between class indices
     op_mean(op_abs(y_true_class - y_pred_class))
@@ -446,7 +446,7 @@ builders <- list(
 # 2) Run full LSTM workflow or load saved outputs
 # ============================================================
 # Set to TRUE only when you want to rerun all LSTM modelling steps.
-if (F) {
+if (T) {
   
   # ============================================================
   # 2a) Print model summaries
@@ -647,3 +647,90 @@ if (F) {
   cat("\nPer-class accuracy:\n")
   print(round(diag(test_cm) / rowSums(test_cm), 3))
 }
+
+# ============================================================
+# 4) Generate plots and tables
+# ============================================================
+
+library(ggplot2)
+library(patchwork)
+
+# Use the validation history from the selected model
+history_plot <- histories[[best_name]]
+
+# Build data frame
+df <- data.frame(
+  epoch    = 1:length(history_plot$metrics$loss),
+  loss     = history_plot$metrics$loss,
+  val_loss = history_plot$metrics$val_loss,
+  acc      = history_plot$metrics$sparse_categorical_accuracy,
+  val_acc  = history_plot$metrics$val_sparse_categorical_accuracy,
+  mae      = history_plot$metrics$ordinal_mae,
+  val_mae  = history_plot$metrics$val_ordinal_mae
+)
+
+# Common theme
+pub_theme <- theme_minimal(base_size = 12) +
+  theme(
+    plot.title      = element_text(face = "bold", size = 12, hjust = 0.5),
+    axis.title      = element_text(face = "bold"),
+    legend.position = "bottom",
+    legend.title    = element_blank(),
+    panel.grid.minor = element_blank(),
+    strip.text      = element_text(face = "bold")
+  )
+
+# Accuracy panel
+p_acc <- ggplot(df, aes(x = epoch)) +
+  geom_line(aes(y = acc, color = "Training"), linewidth = 1) +
+  geom_line(aes(y = val_acc, color = "Validation"), linewidth = 1) +
+  labs(
+    title = "Accuracy",
+    x = "Epoch",
+    y = "Accuracy"
+  ) +
+  scale_color_manual(values = c("Training" = "#1f77b4", "Validation" = "#d62728")) +
+  pub_theme
+
+# Loss panel
+p_loss <- ggplot(df, aes(x = epoch)) +
+  geom_line(aes(y = loss, color = "Training"), linewidth = 1) +
+  geom_line(aes(y = val_loss, color = "Validation"), linewidth = 1) +
+  labs(
+    title = "Loss",
+    x = "Epoch",
+    y = "Loss"
+  ) +
+  scale_color_manual(values = c("Training" = "#1f77b4", "Validation" = "#d62728")) +
+  pub_theme
+
+# Ordinal MAE panel
+p_mae <- ggplot(df, aes(x = epoch)) +
+  geom_line(aes(y = mae, color = "Training"), linewidth = 1) +
+  geom_line(aes(y = val_mae, color = "Validation"), linewidth = 1) +
+  labs(
+    title = "Ordinal MAE",
+    x = "Epoch",
+    y = "Ordinal MAE"
+  ) +
+  scale_color_manual(values = c("Training" = "#1f77b4", "Validation" = "#d62728")) +
+  pub_theme
+
+# Combine into one publication-ready figure
+final_fig <- (p_acc / p_loss / p_mae) +
+  plot_annotation(
+    title = "Training and Validation Performance of the Selected Stacked LSTM Model",
+    theme = theme(
+      plot.title = element_text(face = "bold", size = 14, hjust = 0.5)
+    )
+  )
+
+final_fig
+
+ggsave(
+  filename = "lstm_training_curves.png",
+  plot = final_fig,
+  width = 12,
+  height = 12,
+  dpi = 300
+)
