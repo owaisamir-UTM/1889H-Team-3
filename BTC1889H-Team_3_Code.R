@@ -247,7 +247,7 @@ table(y_train)
 table(y_test)
 
 # ============================================================
-# 24) Define custom ordinal MAE metric
+# 24) Define custom ordinal MAE metric and weighted kappa metric
 # ============================================================
 metric_ordinal_mae <- custom_metric(
   "ordinal_mae",
@@ -264,6 +264,53 @@ metric_ordinal_mae <- custom_metric(
   }
 )
 
+# Compute quadratic weighted kappa from predicted classes
+compute_weighted_kappa <- function(actual, predicted, k = 5) {
+  cm <- matrix(0L, nrow = k, ncol = k)
+  
+  for (i in seq_along(actual)) {
+    cm[actual[i] + 1L, predicted[i] + 1L] <-
+      cm[actual[i] + 1L, predicted[i] + 1L] + 1L
+  }
+  
+  n <- sum(cm)
+  w <- outer(0:(k - 1), 0:(k - 1),
+             function(i, j) (i - j)^2 / (k - 1)^2)
+  E <- outer(rowSums(cm), colSums(cm)) / n
+  
+  round(1 - sum(w * cm) / sum(w * E), 4)
+}
+
+# ============================================================
+# 25) Set global model parameters
+# ============================================================
+embedding_dim <- 64
+lstm_units    <- 64
+num_classes   <- 5
+batch_size    <- 32
+epochs        <- 10
+val_split     <- 0.2
+
+# ============================================================
+# 26) Define helper functions
+# ============================================================
+
+# Compile all models with the same settings
+compile_model <- function(model) {
+  model |> compile(
+    optimizer = "adam",
+    loss      = "sparse_categorical_crossentropy",
+    metrics   = list("sparse_categorical_accuracy", metric_ordinal_mae)
+  )
+}
+
+
+# Extract the final epoch value of a validation metric
+final_val <- function(history, metric) {
+  vals <- history$metrics[[metric]]
+  if (is.null(vals)) return(NA_real_)
+  round(tail(vals, 1), 4)
+}
 
 ###############################################################################
 # SECTION B — FEED-FORWARD MODEL
@@ -310,17 +357,7 @@ metric_ordinal_mae <- custom_metric(
 ###############################################################################
 
 # ============================================================
-# 1) Set model parameters
-# ============================================================
-embedding_dim <- 64
-lstm_units    <- 64
-num_classes   <- 5
-batch_size    <- 32
-epochs        <- 10
-val_split     <- 0.2
-
-# ============================================================
-# 2) Define model builder functions
+# 1) Define model builder functions
 # ============================================================
 
 # Baseline:
@@ -406,50 +443,13 @@ builders <- list(
 )
 
 # ============================================================
-# 3) Define helper functions
-# ============================================================
-
-# Compile all models with the same settings
-compile_model <- function(model) {
-  model |> compile(
-    optimizer = "adam",
-    loss      = "sparse_categorical_crossentropy",
-    metrics   = list("sparse_categorical_accuracy", metric_ordinal_mae)
-  )
-}
-
-# Compute quadratic weighted kappa from predicted classes
-compute_weighted_kappa <- function(actual, predicted, k = 5) {
-  cm <- matrix(0L, nrow = k, ncol = k)
-  
-  for (i in seq_along(actual)) {
-    cm[actual[i] + 1L, predicted[i] + 1L] <-
-      cm[actual[i] + 1L, predicted[i] + 1L] + 1L
-  }
-  
-  n <- sum(cm)
-  w <- outer(0:(k - 1), 0:(k - 1),
-             function(i, j) (i - j)^2 / (k - 1)^2)
-  E <- outer(rowSums(cm), colSums(cm)) / n
-  
-  round(1 - sum(w * cm) / sum(w * E), 4)
-}
-
-# Extract the final epoch value of a validation metric
-final_val <- function(history, metric) {
-  vals <- history$metrics[[metric]]
-  if (is.null(vals)) return(NA_real_)
-  round(tail(vals, 1), 4)
-}
-
-# ============================================================
-# 4) Run full LSTM workflow or load saved outputs
+# 2) Run full LSTM workflow or load saved outputs
 # ============================================================
 # Set to TRUE only when you want to rerun all LSTM modelling steps.
 if (F) {
   
   # ============================================================
-  # 4a) Print model summaries
+  # 2a) Print model summaries
   # ============================================================
   cat("========== Model Architecture Summaries ==========\n")
   
@@ -477,7 +477,7 @@ if (F) {
   print(param_table, row.names = FALSE)
   
   # ============================================================
-  # 4b) Train all four models
+  # 2b) Train all four models
   # ============================================================
   n_val   <- floor(nrow(x_train) * val_split)
   n_train <- nrow(x_train) - n_val
@@ -507,7 +507,7 @@ if (F) {
   }
   
   # ============================================================
-  # 4c) Compare validation performance
+  # 2c) Compare validation performance
   # ============================================================
   val_results <- do.call(rbind, lapply(names(models), function(nm) {
     val_probs <- models[[nm]] |> predict(x_val, verbose = 0)
@@ -527,7 +527,7 @@ if (F) {
   cat("===========================================\n")
   
   # ============================================================
-  # 4d) Select the best model
+  # 2d) Select the best model
   # ============================================================
   val_results$rank_kappa <- rank(-val_results$Val_Kappa,  ties.method = "first")
   val_results$rank_mae   <- rank( val_results$Val_OrdMAE, ties.method = "first")
@@ -547,7 +547,7 @@ if (F) {
   val_results <- val_results[, c("Model", "Val_Kappa", "Val_OrdMAE", "Val_Acc")]
   
   # ============================================================
-  # 4e) Retrain the best model on the full training set
+  # 2e) Retrain the best model on the full training set
   # ============================================================
   cat("\n--- Retraining best model (", best_name, ") on full training set ---\n")
   
@@ -565,7 +565,7 @@ if (F) {
   cat("Best model saved to best_lstm_model.keras\n")
   
   # ============================================================
-  # 4f) Evaluate the best model on the test set
+  # 2f) Evaluate the best model on the test set
   # ============================================================
   cat("\n--- Test Set Evaluation:", best_name, "---\n")
   
@@ -590,7 +590,7 @@ if (F) {
   print(round(diag(test_cm) / rowSums(test_cm), 3))
   
   # ============================================================
-  # 4g) Save LSTM results
+  # 2g) Save LSTM results
   # ============================================================
   save(
     param_table,
@@ -613,7 +613,7 @@ if (F) {
 } else {
   
   # ============================================================
-  # 4a) Load saved model and results
+  # 3a) Load saved model and results
   # ============================================================
   cat("\n--- Loading saved LSTM model and results ---\n")
   
@@ -627,7 +627,7 @@ if (F) {
   cat("Loaded results from lstm_results.RData\n")
   
   # ============================================================
-  # 4b) Reprint saved outputs
+  # 3b) Reprint saved outputs
   # ============================================================
   cat("\n========== Parameter Count Summary ==========\n")
   print(param_table, row.names = FALSE)
