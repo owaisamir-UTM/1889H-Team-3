@@ -21,6 +21,12 @@ rm(list = ls())
 # ============================================================
 library(stringr)
 library(keras3)
+library(ggplot2)
+library(patchwork)
+library(gt)
+library(dplyr)
+library(scales)
+library(tibble)
 
 # ============================================================
 # 2) Read training and test datasets
@@ -1292,12 +1298,6 @@ if (F) {
 # ============================================================
 # 4) Generate plots and tables
 # ============================================================
-library(ggplot2)
-library(patchwork)
-library(gt)
-library(dplyr)
-library(scales)
-library(tibble)
 
 ################################################################################
 # Validation results table
@@ -1433,12 +1433,13 @@ df <- data.frame(
 # Common theme
 pub_theme <- theme_minimal(base_size = 12) +
   theme(
-    plot.title      = element_text(face = "bold", size = 12, hjust = 0.5),
+    plot.title      = element_text(face = "bold", hjust = 0.5),
     axis.title      = element_text(face = "bold"),
     legend.position = "bottom",
     legend.title    = element_blank(),
+    panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
-    strip.text      = element_text(face = "bold")
+    axis.line = element_line(color = "black")
   )
 
 # Accuracy panel
@@ -1487,3 +1488,5 @@ final_fig <- (p_acc / p_loss / p_mae) +
   )
 
 final_fig
+
+ggsave("lstm_training_curves.png", final_fig, width = 10, height = 10, dpi = 300)
