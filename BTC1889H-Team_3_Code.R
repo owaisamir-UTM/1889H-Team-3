@@ -315,15 +315,6 @@ final_val <- function(history, metric) {
   round(tail(vals, 1), 4)
 }
 
-# Early stopping callback to avoid overfitting
-early_stop <- callback_early_stopping(
-  # Track the validation loss after each epoch
-  monitor = "val_loss",
-  # Wait for 5 epochs without improvement before stopping
-  patience = 5,
-  # After stopping, revert model to the epoch with the best validation loss
-  restore_best_weights = TRUE
-)
 # ============================================================
 # 27) Create one global stratified validation split
 # ============================================================
@@ -360,22 +351,6 @@ print(prop.table(table(y_val)))
 ###############################################################################
 # SECTION B — FEED-FORWARD MODEL
 ###############################################################################
-
-# ============================================================
-# 1) Add feed-forward model code here
-# ============================================================
-# Keep the same subsection structure for the FF model:
-# 1) Set model parameters
-# 2) Define model builder functions
-# 3) Define helper functions
-# 4) Print model summaries
-# 5) Train candidate models
-# 6) Compare validation performance
-# 7) Select the best model
-# 8) Retrain the best model
-# 9) Evaluate on the test set
-# 10) Save results
-
 
 # ============================================================
 # 1) Define model builder functions
@@ -454,7 +429,7 @@ ff_builders <- list(
 # 2) Run full FF workflow or load saved outputs
 # ============================================================
 # Set to TRUE only when you want to rerun all FF modelling steps
-if (T) {
+if (F) {
   # ============================================================
   # 2a) Print model summaries
   # ============================================================
@@ -503,7 +478,6 @@ if (T) {
       batch_size = batch_size,
       validation_data = list(x_val, y_val),
       verbose = 1,
-      callbacks = list(early_stop)
     )
 
     ff_models[[nm]] <- ff_model
@@ -662,24 +636,6 @@ if (T) {
   cat("\nPer-class accuracy:\n")
   print(round(diag(ff_test_cm) / rowSums(ff_test_cm), 3))
 }
-###############################################################################
-# SECTION C — RNN MODEL
-###############################################################################
-
-# ============================================================
-# 1) Add RNN model code here
-# ============================================================
-# Keep the same subsection structure for the RNN model:
-# 1) Set model parameters
-# 2) Define model builder functions
-# 3) Define helper functions
-# 4) Print model summaries
-# 5) Train candidate models
-# 6) Compare validation performance
-# 7) Select the best model
-# 8) Retrain the best model
-# 9) Evaluate on the test set
-# 10) Save results
 
 ###############################################################################
 # SECTION C — RNN MODEL
@@ -772,7 +728,7 @@ rnn_builders <- list(
 # 2) Run full RNN workflow or load saved outputs
 # ============================================================
 
-if (T) {
+if (F) {
   
   # ============================================================
   # 2a) Print model summaries
@@ -821,7 +777,6 @@ if (T) {
       batch_size      = batch_size,
       validation_data = list(x_val, y_val),
       verbose         = 1,
-      callbacks       = list(early_stop)
     )
     
     rnn_models[[nm]] <- model
@@ -1069,7 +1024,7 @@ builders <- list(
 # 2) Run full LSTM workflow or load saved outputs
 # ============================================================
 # Set to TRUE only when you want to rerun all LSTM modelling steps.
-if (T) {
+if (F) {
   # ============================================================
   # 2a) Print model summaries
   # ============================================================
