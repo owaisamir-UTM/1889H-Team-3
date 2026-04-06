@@ -930,6 +930,67 @@ if (F) {
   print(round(diag(rnn_test_cm) / rowSums(rnn_test_cm), 3))
 }
 
+# ============================================================
+# 3) Generate plots and tables
+# ============================================================
+
+rnn_history_plot <- rnn_histories[[rnn_best_name]]
+
+rnn_df <- data.frame(
+  epoch    = 1:length(rnn_history_plot$metrics$loss),
+  loss     = rnn_history_plot$metrics$loss,
+  val_loss = rnn_history_plot$metrics$val_loss,
+  acc      = rnn_history_plot$metrics$sparse_categorical_accuracy,
+  val_acc  = rnn_history_plot$metrics$val_sparse_categorical_accuracy,
+  mae      = rnn_history_plot$metrics$ordinal_mae,
+  val_mae  = rnn_history_plot$metrics$val_ordinal_mae
+)
+
+rnn_pub_theme <- theme_minimal(base_size = 12) +
+  theme(
+    plot.title      = element_text(face = "bold", hjust = 0.5),
+    axis.title      = element_text(face = "bold"),
+    legend.position = "bottom",
+    legend.title    = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(color = "black")
+  )
+
+# Accuracy
+rnn_p_acc <- ggplot(rnn_df, aes(epoch)) +
+  geom_line(aes(y = acc, color = "Training"), linewidth = 1) +
+  geom_line(aes(y = val_acc, color = "Validation"), linewidth = 1) +
+  labs(title = "RNN Accuracy", y = "Accuracy", x = "Epoch") +
+  scale_color_manual(values = c("Training" = "#1f77b4", "Validation" = "#d62728")) +
+  rnn_pub_theme
+
+# Loss
+rnn_p_loss <- ggplot(rnn_df, aes(epoch)) +
+  geom_line(aes(y = loss, color = "Training"), linewidth = 1) +
+  geom_line(aes(y = val_loss, color = "Validation"), linewidth = 1) +
+  labs(title = "RNN Loss", y = "Loss", x = "Epoch") +
+  scale_color_manual(values = c("Training" = "#1f77b4", "Validation" = "#d62728")) +
+  rnn_pub_theme
+
+# MAE
+rnn_p_mae <- ggplot(rnn_df, aes(epoch)) +
+  geom_line(aes(y = mae, color = "Training"), linewidth = 1) +
+  geom_line(aes(y = val_mae, color = "Validation"), linewidth = 1) +
+  labs(title = "RNN Ordinal MAE", y = "MAE", x = "Epoch") +
+  scale_color_manual(values = c("Training" = "#1f77b4", "Validation" = "#d62728")) +
+  rnn_pub_theme
+
+rnn_final_fig <- (rnn_p_acc / rnn_p_loss / rnn_p_mae) +
+  plot_annotation(title = "Training and Validation Performance of the Baseline Single Layer RNN Model",
+                  theme = theme(
+                    plot.title = element_text(face = "bold", size = 14, hjust = 0.5)
+                  )
+  )
+rnn_final_fig
+
+ggsave("rnn_training_curves.png", rnn_final_fig, width = 10, height = 10, dpi = 300)
+
 ###############################################################################
 # SECTION D — LSTM MODEL
 ###############################################################################
