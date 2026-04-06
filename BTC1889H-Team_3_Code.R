@@ -665,7 +665,7 @@ ff_gt <- ff_val_results %>%
     decimals = 4
   ) %>%
   tab_header(
-    title = "Validation Performance of FF Models"
+    title = "Validation Performance of FNN Models"
   ) %>%
   cols_align(
     align = "center",
@@ -702,7 +702,7 @@ ff_table_y <- ff_param_table %>%
     decimals = 0
   ) %>%
   tab_header(
-    title = "Parameter Counts for Candidate FF Architectures"
+    title = "Parameter Counts for Candidate FNN Architectures"
   ) %>%
   cols_align(
     align = "center",
@@ -726,7 +726,7 @@ ff_cm_gt <- ff_cm_df %>%
     Actual = "Actual"
   ) %>%
   tab_header(
-    title = "Confusion Matrix for Final FF Model"
+    title = "Confusion Matrix for Final FNN Model"
   ) %>%
   cols_align(
     align = "center",
@@ -823,7 +823,7 @@ ff_plot_mae <- ggplot(ff_df, aes(x = epoch)) +
 # Combine into final figure
 ff_final_fig <- (ff_plot_acc / ff_plot_loss / ff_plot_mae) +
   plot_annotation(
-    title = "Training and Validation Performance of the Stacked FF Model with Dropout",
+    title = "Training and Validation Performance of the Stacked FNN Model with Dropout",
     theme = theme(
       plot.title = element_text(face = "bold", size = 14, hjust = 0.5)
     )
