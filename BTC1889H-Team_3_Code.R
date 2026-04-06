@@ -686,6 +686,295 @@ if (TRUE) {
 # 9) Evaluate on the test set
 # 10) Save results
 
+###############################################################################
+# SECTION C — RNN MODEL
+###############################################################################
+
+# ============================================================
+# 1) Define model builder functions
+# ============================================================
+
+# Baseline:
+# Embedding -> SimpleRNN -> Dense(softmax)
+build_rnn_baseline <- function() {
+  keras_model_sequential(name = "rnn_baseline") |>
+    layer_embedding(
+      input_dim    = num_words,
+      output_dim   = embedding_dim,
+      input_length = maxlen
+    ) |>
+    layer_simple_rnn(units = num_units) |>
+    layer_dense(units = num_classes, activation = "softmax")
+}
+
+# Baseline + Dropout
+# Embedding -> SimpleRNN(dropout, recurrent_dropout) -> Dense(softmax)
+build_rnn_baseline_dropout <- function() {
+  keras_model_sequential(name = "rnn_baseline_dropout") |>
+    layer_embedding(
+      input_dim    = num_words,
+      output_dim   = embedding_dim,
+      input_length = maxlen
+    ) |>
+    layer_simple_rnn(
+      units = num_units,
+      dropout = 0.3,
+      recurrent_dropout = 0.2
+    ) |>
+    layer_dense(units = num_classes, activation = "softmax")
+}
+
+# Stacked RNN
+# Embedding -> SimpleRNN(return_sequences = TRUE) -> SimpleRNN -> Dense(softmax)
+build_rnn_stacked <- function() {
+  keras_model_sequential(name = "rnn_stacked") |>
+    layer_embedding(
+      input_dim    = num_words,
+      output_dim   = embedding_dim,
+      input_length = maxlen
+    ) |>
+    layer_simple_rnn(
+      units = num_units,
+      return_sequences = TRUE
+    ) |>
+    layer_simple_rnn(units = num_units) |>
+    layer_dense(units = num_classes, activation = "softmax")
+}
+
+# Stacked + Dropout
+# Embedding -> SimpleRNN(dropout, recurrent_dropout, return_sequences = TRUE)
+#           -> SimpleRNN(dropout, recurrent_dropout)
+#           -> Dense(softmax)
+build_rnn_stacked_dropout <- function() {
+  keras_model_sequential(name = "rnn_stacked_dropout") |>
+    layer_embedding(
+      input_dim    = num_words,
+      output_dim   = embedding_dim,
+      input_length = maxlen
+    ) |>
+    layer_simple_rnn(
+      units = num_units,
+      return_sequences = TRUE,
+      dropout = 0.3,
+      recurrent_dropout = 0.2
+    ) |>
+    layer_simple_rnn(
+      units = num_units,
+      dropout = 0.3,
+      recurrent_dropout = 0.2
+    ) |>
+    layer_dense(units = num_classes, activation = "softmax")
+}
+
+rnn_builders <- list(
+  rnn_baseline         = build_rnn_baseline,
+  rnn_baseline_dropout = build_rnn_baseline_dropout,
+  rnn_stacked          = build_rnn_stacked,
+  rnn_stacked_dropout  = build_rnn_stacked_dropout
+)
+
+# ============================================================
+# 2) Run full RNN workflow or load saved outputs
+# ============================================================
+
+if (TRUE) {
+  
+  # ============================================================
+  # 2a) Print model summaries
+  # ============================================================
+  cat("========== RNN Model Architecture Summaries ==========\n")
+  
+  rnn_param_table <- lapply(names(rnn_builders), function(nm) {
+    model <- rnn_builders[[nm]]()
+    compile_model(model)
+    
+    dummy <- matrix(1L, nrow = 1, ncol = maxlen)
+    invisible(model(dummy))
+    
+    cat("\n---", nm, "---\n")
+    summary(model)
+    
+    data.frame(
+      Model = nm,
+      Total_Params = as.integer(count_params(model)),
+      stringsAsFactors = FALSE
+    )
+  })
+  
+  rnn_param_table <- do.call(rbind, rnn_param_table)
+  
+  cat("\n========== RNN Parameter Count Summary ==========\n")
+  print(rnn_param_table, row.names = FALSE)
+  
+  # ============================================================
+  # 2b) Train all RNN models
+  # ============================================================
+  rnn_histories <- list()
+  rnn_models <- list()
+  
+  for (nm in names(rnn_builders)) {
+    cat("\n--- Training:", nm, "---\n")
+    
+    model <- rnn_builders[[nm]]()
+    compile_model(model)
+    
+    rnn_histories[[nm]] <- model |> fit(
+      x_train_model, y_train_model,
+      epochs          = epochs,
+      batch_size      = batch_size,
+      validation_data = list(x_val, y_val),
+      verbose         = 1,
+      callbacks       = list(early_stop)
+    )
+    
+    rnn_models[[nm]] <- model
+  }
+  
+  # ============================================================
+  # 2c) Compare validation performance
+  # ============================================================
+  rnn_val_results <- do.call(rbind, lapply(names(rnn_models), function(nm) {
+    val_probs <- rnn_models[[nm]] |> predict(x_val, verbose = 0)
+    val_preds <- apply(val_probs, 1, which.max) - 1L
+    
+    data.frame(
+      Model      = nm,
+      Val_Kappa  = compute_weighted_kappa(y_val, val_preds),
+      Val_OrdMAE = final_val(rnn_histories[[nm]], "val_ordinal_mae"),
+      Val_Acc    = final_val(rnn_histories[[nm]], "val_sparse_categorical_accuracy"),
+      stringsAsFactors = FALSE
+    )
+  }))
+  
+  cat("\n========== RNN Validation Comparison ==========\n")
+  print(rnn_val_results, row.names = FALSE)
+  cat("==============================================\n")
+  
+  # ============================================================
+  # 2d) Select the best RNN model
+  # ============================================================
+  # Rank models by kappa (primary), then ordinal MAE, then accuracy
+  rnn_val_results$rank_kappa <- rank(-rnn_val_results$Val_Kappa, ties.method = "first")
+  rnn_val_results$rank_mae   <- rank(rnn_val_results$Val_OrdMAE, ties.method = "first")
+  rnn_val_results$rank_acc   <- rank(-rnn_val_results$Val_Acc, ties.method = "first")
+  
+  rnn_val_results <- rnn_val_results[
+    order(
+      rnn_val_results$rank_kappa,
+      rnn_val_results$rank_mae,
+      rnn_val_results$rank_acc
+    ),
+  ]
+  
+  rnn_best_name <- rnn_val_results$Model[1]
+  
+  cat("\nBest RNN model:", rnn_best_name, "\n")
+  cat("  Validation Kappa  :", rnn_val_results$Val_Kappa[1], "\n")
+  cat("  Validation OrdMAE :", rnn_val_results$Val_OrdMAE[1], "\n")
+  cat("  Validation Acc    :", rnn_val_results$Val_Acc[1], "\n")
+  
+  rnn_val_results <- rnn_val_results[, c("Model", "Val_Kappa", "Val_OrdMAE", "Val_Acc")]
+  
+  # ============================================================
+  # 2e) Retrain best model on full training set
+  # ============================================================
+  cat("\n--- Retraining best RNN model (", rnn_best_name, ") ---\n")
+  
+  rnn_best_model <- rnn_builders[[rnn_best_name]]()
+  compile_model(rnn_best_model)
+  
+  rnn_history_best <- rnn_best_model |> fit(
+    x_train, y_train,
+    epochs     = epochs,
+    batch_size = batch_size,
+    verbose    = 1
+  )
+  
+  save_model(rnn_best_model, "best_rnn_model.keras")
+  cat("Best RNN model saved to best_rnn_model.keras\n")
+  
+  # ============================================================
+  # 2f) Evaluate on test set
+  # ============================================================
+  rnn_test_eval  <- rnn_best_model |> evaluate(x_test, y_test, verbose = 0)
+  rnn_test_probs <- rnn_best_model |> predict(x_test, verbose = 0)
+  rnn_test_preds <- apply(rnn_test_probs, 1, which.max) - 1L
+  
+  rnn_test_acc   <- round(as.numeric(rnn_test_eval[["sparse_categorical_accuracy"]]), 4)
+  rnn_test_mae   <- round(as.numeric(rnn_test_eval[["ordinal_mae"]]), 4)
+  rnn_test_kappa <- compute_weighted_kappa(y_test, rnn_test_preds)
+  
+  cat("\n--- RNN Test Results ---\n")
+  cat("Accuracy:", rnn_test_acc, "\n")
+  cat("MAE:", rnn_test_mae, "\n")
+  cat("Kappa:", rnn_test_kappa, "\n")
+  
+  rnn_test_cm <- table(Actual = y_test, Predicted = rnn_test_preds)
+  
+  cat("\nConfusion Matrix:\n")
+  print(rnn_test_cm)
+  
+  cat("\nPer-class accuracy:\n")
+  print(round(diag(rnn_test_cm) / rowSums(rnn_test_cm), 3))
+  
+  # ============================================================
+  # 2g) Save results
+  # ============================================================
+  save(
+    rnn_param_table,
+    rnn_histories,
+    rnn_val_results,
+    rnn_best_name,
+    rnn_history_best,
+    rnn_test_eval,
+    rnn_test_probs,
+    rnn_test_preds,
+    rnn_test_cm,
+    rnn_test_acc,
+    rnn_test_mae,
+    rnn_test_kappa,
+    file = "rnn_results.RData"
+  )
+  
+  cat("\nRNN results saved to rnn_results.RData\n")
+  
+} else {
+  
+  # ============================================================
+  # Load saved model and results
+  # ============================================================
+  cat("\n--- Loading saved RNN model and results ---\n")
+  
+  rnn_best_model <- load_model(
+    "best_rnn_model.keras",
+    custom_objects = list(ordinal_mae = metric_ordinal_mae)
+  )
+  load("rnn_results.RData")
+  
+  cat("Loaded best RNN model:", rnn_best_name, "\n")
+  cat("Loaded results from rnn_results.RData\n")
+  
+  # ============================================================
+  # Reprint saved outputs
+  # ============================================================
+  cat("\n========== RNN Parameter Count Summary ==========\n")
+  print(rnn_param_table, row.names = FALSE)
+  
+  cat("\n========== RNN Validation Comparison ==========\n")
+  print(rnn_val_results, row.names = FALSE)
+  cat("==============================================\n")
+  
+  cat("\n--- Saved RNN Test Results ---\n")
+  cat("  Accuracy       :", rnn_test_acc, "\n")
+  cat("  Ordinal MAE    :", rnn_test_mae, "\n")
+  cat("  Weighted Kappa :", rnn_test_kappa, "\n")
+  
+  cat("\nConfusion Matrix:\n")
+  print(rnn_test_cm)
+  
+  cat("\nPer-class accuracy:\n")
+  print(round(diag(rnn_test_cm) / rowSums(rnn_test_cm), 3))
+}
 
 ###############################################################################
 # SECTION D — LSTM MODEL
