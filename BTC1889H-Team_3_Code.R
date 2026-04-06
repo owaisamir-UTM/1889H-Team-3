@@ -755,6 +755,43 @@ ff_cm_gt %>%
 
 ff_cm_gt
 
+# Row-wise percentages
+ff_cm_prop <- prop.table(ff_test_cm, margin = 1)
+
+# Convert to %
+ff_cm_pct <- round(ff_cm_prop * 100, 1)
+
+ff_cm_pct_df <- as.data.frame.matrix(ff_cm_pct)
+
+ff_cm_pct_df$Actual <- rownames(ff_cm_pct_df)
+ff_cm_pct_df <- ff_cm_pct_df[, c("Actual", setdiff(names(ff_cm_pct_df), "Actual"))]
+
+ff_cm_pct_gt <- ff_cm_pct_df %>%
+  gt() %>%
+  cols_label(
+    Actual = "Actual"
+  ) %>%
+  tab_header(
+    title = "Confusion Matrix (%) for Final FNN Model"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  fmt_number(
+    columns = -Actual,
+    decimals = 1
+  ) %>%
+  data_color(
+    columns = -Actual,
+    fn = scales::col_numeric(
+      palette = c("#f7fbff", "#6baed6", "#08306b"),
+      domain = c(0, 100)
+    )
+  )
+
+ff_cm_pct_gt
+
 ################################################################################
 # Best FF model train/validation plot
 
@@ -1283,6 +1320,7 @@ if (F) {
   # ============================================================
   # 2a) Print model summaries
   # ============================================================
+<<<<<<< Updated upstream
   cat("========== Model Architecture Summaries ==========\n")
 
   param_table <- lapply(names(builders), function(nm) {
@@ -1295,6 +1333,20 @@ if (F) {
 
     cat("\n---", nm, "---\n")
     summary(model)
+=======
+  cat("========== LSTM Model Architecture Summaries ==========\n")
+
+  lstm_param_table <- lapply(names(lstm_builders), function(nm) {
+    lstm_model <- lstm_builders[[nm]]()
+    compile_model(lstm_model)
+
+    # Force model to build before printing summary
+    dummy <- matrix(1L, nrow = 1, ncol = maxlen)
+    invisible(lstm_model(dummy))
+
+    cat("\n---", nm, "---\n")
+    summary(lstm_model)
+>>>>>>> Stashed changes
 
     data.frame(
       Model = nm,
@@ -1303,10 +1355,17 @@ if (F) {
     )
   })
 
+<<<<<<< Updated upstream
   param_table <- do.call(rbind, param_table)
 
   cat("\n========== Parameter Count Summary ==========\n")
   print(param_table, row.names = FALSE)
+=======
+  lstm_param_table <- do.call(rbind, lstm_param_table)
+
+  cat("\n========== LSTM Parameter Count Summary ==========\n")
+  print(lstm_param_table, row.names = FALSE)
+>>>>>>> Stashed changes
 
   # ============================================================
   # 2b) Train all four models
@@ -1315,6 +1374,7 @@ if (F) {
 
   set.seed(123)
 
+<<<<<<< Updated upstream
   histories <- list()
   models <- list()
 
@@ -1325,6 +1385,18 @@ if (F) {
     compile_model(model)
 
     histories[[nm]] <- model |> fit(
+=======
+  lstm_histories <- list()
+  lstm_models <- list()
+
+  for (nm in names(lstm_builders)) {
+    cat("\n--- Training:", nm, "---\n")
+
+    lstm_model <- lstm_builders[[nm]]()
+    compile_model(lstm_model)
+
+    lstm_histories[[nm]] <- lstm_model |> fit(
+>>>>>>> Stashed changes
       x_train_model, y_train_model,
       epochs = epochs,
       batch_size = batch_size,
@@ -1332,7 +1404,11 @@ if (F) {
       verbose = 1
     )
 
+<<<<<<< Updated upstream
     models[[nm]] <- model
+=======
+    lstm_models[[nm]] <- lstm_model
+>>>>>>> Stashed changes
   }
 
   # ============================================================
@@ -1343,8 +1419,13 @@ if (F) {
   # 2. lowest validation ordinal MAE
   # 3. highest validation accuracy
 
+<<<<<<< Updated upstream
   val_results <- do.call(rbind, lapply(names(models), function(nm) {
     val_probs <- models[[nm]] |> predict(x_val, verbose = 0)
+=======
+  lstm_val_results <- do.call(rbind, lapply(names(lstm_models), function(nm) {
+    val_probs <- lstm_models[[nm]] |> predict(x_val, verbose = 0)
+>>>>>>> Stashed changes
     val_preds <- apply(val_probs, 1, which.max) - 1L
 
     data.frame(
@@ -1356,13 +1437,19 @@ if (F) {
     )
   }))
 
+<<<<<<< Updated upstream
   cat("\n========== Validation Comparison ==========\n")
   print(val_results, row.names = FALSE)
+=======
+  cat("\n========== LSTM Validation Comparison ==========\n")
+  print(lstm_val_results, row.names = FALSE)
+>>>>>>> Stashed changes
   cat("===========================================\n")
 
   # ============================================================
   # 2d) Select the best model
   # ============================================================
+<<<<<<< Updated upstream
   val_results$rank_kappa <- rank(-val_results$Val_Kappa, ties.method = "first")
   val_results$rank_mae <- rank(val_results$Val_OrdMAE, ties.method = "first")
   val_results$rank_acc <- rank(-val_results$Val_Acc, ties.method = "first")
@@ -1380,10 +1467,34 @@ if (F) {
 
   # Keep only the main comparison columns
   val_results <- val_results[, c("Model", "Val_Kappa", "Val_OrdMAE", "Val_Acc")]
+=======
+  lstm_val_results$rank_kappa <- rank(-lstm_val_results$Val_Kappa, ties.method = "first")
+  lstm_val_results$rank_mae <- rank(lstm_val_results$Val_OrdMAE, ties.method = "first")
+  lstm_val_results$rank_acc <- rank(-lstm_val_results$Val_Acc, ties.method = "first")
+
+  lstm_val_results <- lstm_val_results[
+    order(
+      lstm_val_results$rank_kappa,
+      lstm_val_results$rank_mae,
+      lstm_val_results$rank_acc
+    ),
+  ]
+
+  lstm_best_name <- lstm_val_results$Model[1]
+
+  cat("\nBest LSTM model:", lstm_best_name, "\n")
+  cat("  Validation Kappa  :", lstm_val_results$Val_Kappa[1], "\n")
+  cat("  Validation OrdMAE :", lstm_val_results$Val_OrdMAE[1], "\n")
+  cat("  Validation Acc    :", lstm_val_results$Val_Acc[1], "\n")
+
+  # Keep only the main comparison columns
+  lstm_val_results <- lstm_val_results[, c("Model", "Val_Kappa", "Val_OrdMAE", "Val_Acc")]
+>>>>>>> Stashed changes
 
   # ============================================================
   # 2e) Retrain the best model on the full training set
   # ============================================================
+<<<<<<< Updated upstream
   cat("\n--- Retraining best model (", best_name, ") on full training set ---\n")
 
   set.seed(123)
@@ -1392,18 +1503,34 @@ if (F) {
   compile_model(best_model)
 
   history_best <- best_model |> fit(
+=======
+  cat("\n--- Retraining best LSTM model (", lstm_best_name, ") on full training set ---\n")
+
+  set.seed(123)
+
+  lstm_best_model <- lstm_builders[[lstm_best_name]]()
+  compile_model(lstm_best_model)
+
+  lstm_history_best <- lstm_best_model |> fit(
+>>>>>>> Stashed changes
     x_train, y_train,
     epochs = epochs,
     batch_size = batch_size,
     verbose = 1
   )
 
+<<<<<<< Updated upstream
   save_model(best_model, "best_lstm_model.keras")
   cat("Best model saved to best_lstm_model.keras\n")
+=======
+  save_model(lstm_best_model, "best_lstm_model.keras")
+  cat("Best LSTM model saved to best_lstm_model.keras\n")
+>>>>>>> Stashed changes
 
   # ============================================================
   # 2f) Evaluate the best model on the test set
   # ============================================================
+<<<<<<< Updated upstream
   cat("\n--- Test Set Evaluation:", best_name, "---\n")
 
   test_eval <- best_model |> evaluate(x_test, y_test, verbose = 0)
@@ -1425,6 +1552,29 @@ if (F) {
 
   cat("\nPer-class accuracy:\n")
   print(round(diag(test_cm) / rowSums(test_cm), 3))
+=======
+  cat("\n--- Test Set Evaluation:", lstm_best_name, "---\n")
+
+  lstm_test_eval <- lstm_best_model |> evaluate(x_test, y_test, verbose = 0)
+  lstm_test_probs <- lstm_best_model |> predict(x_test, verbose = 0)
+  lstm_test_preds <- apply(lstm_test_probs, 1, which.max) - 1L
+
+  lstm_test_acc <- round(as.numeric(lstm_test_eval[["sparse_categorical_accuracy"]]), 4)
+  lstm_test_mae <- round(as.numeric(lstm_test_eval[["ordinal_mae"]]), 4)
+  lstm_test_kappa <- compute_weighted_kappa(y_test, lstm_test_preds)
+
+  cat("  Accuracy       :", lstm_test_acc, "\n")
+  cat("  Ordinal MAE    :", lstm_test_mae, "\n")
+  cat("  Weighted Kappa :", lstm_test_kappa, "\n")
+
+  lstm_test_cm <- table(Actual = y_test, Predicted = lstm_test_preds)
+
+  cat("\nConfusion Matrix:\n")
+  print(lstm_test_cm)
+
+  cat("\nPer-class accuracy:\n")
+  print(round(diag(lstm_test_cm) / rowSums(lstm_test_cm), 3))
+>>>>>>> Stashed changes
 
   # ============================================================
   # 2g) Save LSTM results
@@ -1445,25 +1595,38 @@ if (F) {
     file = "lstm_results.RData"
   )
 
+<<<<<<< Updated upstream
   cat("\nResults saved to lstm_results.RData\n")
+=======
+  cat("\nLSTM results saved to lstm_results.RData\n")
+>>>>>>> Stashed changes
 } else {
   # ============================================================
   # 3a) Load saved model and results
   # ============================================================
   cat("\n--- Loading saved LSTM model and results ---\n")
 
+<<<<<<< Updated upstream
   best_model <- load_model(
+=======
+  lstm_best_model <- load_model(
+>>>>>>> Stashed changes
     "best_lstm_model.keras",
     custom_objects = list(ordinal_mae = metric_ordinal_mae)
   )
   load("lstm_results.RData")
 
+<<<<<<< Updated upstream
   cat("Loaded best model:", best_name, "\n")
+=======
+  cat("Loaded best LSTM model:", lstm_best_name, "\n")
+>>>>>>> Stashed changes
   cat("Loaded results from lstm_results.RData\n")
 
   # ============================================================
   # 3b) Reprint saved outputs
   # ============================================================
+<<<<<<< Updated upstream
   cat("\n========== Parameter Count Summary ==========\n")
   print(param_table, row.names = FALSE)
 
@@ -1478,6 +1641,22 @@ if (F) {
 
   cat("\nConfusion Matrix:\n")
   print(test_cm)
+=======
+  cat("\n========== LSTM Parameter Count Summary ==========\n")
+  print(lstm_param_table, row.names = FALSE)
+
+  cat("\n========== LSTM Validation Comparison ==========\n")
+  print(lstm_val_results, row.names = FALSE)
+  cat("===========================================\n")
+
+  cat("\n--- Saved Test Results ---\n")
+  cat("  Accuracy       :", lstm_test_acc, "\n")
+  cat("  Ordinal MAE    :", lstm_test_mae, "\n")
+  cat("  Weighted Kappa :", lstm_test_kappa, "\n")
+
+  cat("\nConfusion Matrix:\n")
+  print(lstm_test_cm)
+>>>>>>> Stashed changes
 
   cat("\nPer-class accuracy:\n")
   print(round(diag(test_cm) / rowSums(test_cm), 3))
@@ -1583,12 +1762,50 @@ cm_gt <- cm_df %>%
       domain = NULL
     )
   )
+<<<<<<< Updated upstream
 cm_gt %>%
   tab_style(
     style = cell_text(weight = "bold"),
     locations = cells_body(
       rows = Actual == colnames(cm_df),
       columns = -Actual
+=======
+
+cm_gt
+
+# Row-wise percentages
+cm_prop <- prop.table(lstm_test_cm, margin = 1)
+
+# Convert to %
+cm_pct <- round(cm_prop * 100, 1)
+
+cm_pct_df <- as.data.frame.matrix(cm_pct)
+
+cm_pct_df$Actual <- rownames(cm_pct_df)
+cm_pct_df <- cm_pct_df[, c("Actual", setdiff(names(cm_pct_df), "Actual"))]
+
+cm_pct_gt <- cm_pct_df %>%
+  gt() %>%
+  cols_label(
+    Actual = "Actual"
+  ) %>%
+  tab_header(
+    title = "Confusion Matrix (%) for Final LSTM Model"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  fmt_number(
+    columns = -Actual,
+    decimals = 1
+  ) %>%
+  data_color(
+    columns = -Actual,
+    fn = scales::col_numeric(
+      palette = c("#f7fbff", "#6baed6", "#08306b"),
+      domain = c(0, 100)
+>>>>>>> Stashed changes
     )
   )
 cm_gt
