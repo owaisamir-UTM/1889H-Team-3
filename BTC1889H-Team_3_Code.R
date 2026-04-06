@@ -545,7 +545,7 @@ if (F) {
     "\n--- Retraining best FF model (", ff_best_name,
     ") on full training set ---\n"
   )
-  
+
   set.seed(123)
 
   set.seed(123)
@@ -775,12 +775,13 @@ ff_df <- data.frame(
 # Common theme
 ff_plot_theme <- theme_minimal(base_size = 12) +
   theme(
-    plot.title = element_text(face = "bold", size = 12, hjust = 0.5),
+    plot.title = element_text(face = "bold", hjust = 0.5),
     axis.title = element_text(face = "bold"),
     legend.position = "bottom",
     legend.title = element_blank(),
+    panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
-    strip.text = element_text(face = "bold")
+    axis.line = element_line(color = "black")
   )
 
 # Accuracy panel
