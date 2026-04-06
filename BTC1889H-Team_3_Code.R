@@ -289,7 +289,7 @@ embedding_dim <- 64
 num_units <- 64
 num_classes <- 5
 batch_size <- 32
-epochs <- 10
+epochs <- 5
 val_split <- 0.2
 
 # ============================================================
@@ -454,7 +454,7 @@ ff_builders <- list(
 # 2) Run full FF workflow or load saved outputs
 # ============================================================
 # Set to TRUE only when you want to rerun all FF modelling steps
-if (TRUE) {
+if (T) {
   # ============================================================
   # 2a) Print model summaries
   # ============================================================
@@ -486,13 +486,7 @@ if (TRUE) {
   # ============================================================
   # 2b) Train all four FF models
   # ============================================================
-  # Create a fixed validation split for consistent comparison
-  n_val <- floor(nrow(x_train) * val_split)
-  n_train <- nrow(x_train) - n_val
-  val_idx <- (n_train + 1):nrow(x_train)
-
-  x_val <- x_train[val_idx, , drop = FALSE]
-  y_val <- y_train[val_idx]
+  set.seed(123)
 
   ff_histories <- list()
   ff_models <- list()
@@ -504,8 +498,7 @@ if (TRUE) {
     compile_model(ff_model)
 
     ff_histories[[nm]] <- ff_model |> fit(
-      x_train[1:n_train, ],
-      y_train[1:n_train],
+      x_train_model, y_train_model,
       epochs = epochs,
       batch_size = batch_size,
       validation_data = list(x_val, y_val),
@@ -572,6 +565,8 @@ if (TRUE) {
     "\n--- Retraining best FF model (", ff_best_name,
     ") on full training set ---\n"
   )
+  
+  set.seed(123)
 
   ff_best_model <- ff_builders[[ff_best_name]]()
   compile_model(ff_best_model)
@@ -777,7 +772,7 @@ rnn_builders <- list(
 # 2) Run full RNN workflow or load saved outputs
 # ============================================================
 
-if (TRUE) {
+if (T) {
   
   # ============================================================
   # 2a) Print model summaries
@@ -809,6 +804,8 @@ if (TRUE) {
   # ============================================================
   # 2b) Train all RNN models
   # ============================================================
+  set.seed(123)
+  
   rnn_histories <- list()
   rnn_models <- list()
   
@@ -879,6 +876,8 @@ if (TRUE) {
   # 2e) Retrain best model on full training set
   # ============================================================
   cat("\n--- Retraining best RNN model (", rnn_best_name, ") ---\n")
+  
+  set.seed(123)
   
   rnn_best_model <- rnn_builders[[rnn_best_name]]()
   compile_model(rnn_best_model)
@@ -1070,7 +1069,7 @@ builders <- list(
 # 2) Run full LSTM workflow or load saved outputs
 # ============================================================
 # Set to TRUE only when you want to rerun all LSTM modelling steps.
-if (F) {
+if (T) {
   # ============================================================
   # 2a) Print model summaries
   # ============================================================
@@ -1103,6 +1102,8 @@ if (F) {
   # 2b) Train all four models
   # ============================================================
   # All models use the same global stratified validation set.
+  
+  set.seed(123)
   
   histories <- list()
   models <- list()
@@ -1174,7 +1175,9 @@ if (F) {
   # 2e) Retrain the best model on the full training set
   # ============================================================
   cat("\n--- Retraining best model (", best_name, ") on full training set ---\n")
-
+  
+  set.seed(123)
+  
   best_model <- builders[[best_name]]()
   compile_model(best_model)
 
