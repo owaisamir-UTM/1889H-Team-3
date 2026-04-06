@@ -755,6 +755,43 @@ ff_cm_gt %>%
 
 ff_cm_gt
 
+# Row-wise percentages
+ff_cm_prop <- prop.table(ff_test_cm, margin = 1)
+
+# Convert to %
+ff_cm_pct <- round(ff_cm_prop * 100, 1)
+
+ff_cm_pct_df <- as.data.frame.matrix(ff_cm_pct)
+
+ff_cm_pct_df$Actual <- rownames(ff_cm_pct_df)
+ff_cm_pct_df <- ff_cm_pct_df[, c("Actual", setdiff(names(ff_cm_pct_df), "Actual"))]
+
+ff_cm_pct_gt <- ff_cm_pct_df %>%
+  gt() %>%
+  cols_label(
+    Actual = "Actual"
+  ) %>%
+  tab_header(
+    title = "Confusion Matrix (%) for Final FNN Model"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  fmt_number(
+    columns = -Actual,
+    decimals = 1
+  ) %>%
+  data_color(
+    columns = -Actual,
+    fn = scales::col_numeric(
+      palette = c("#f7fbff", "#6baed6", "#08306b"),
+      domain = c(0, 100)
+    )
+  )
+
+ff_cm_pct_gt
+
 ################################################################################
 # Best FF model train/validation plot
 
