@@ -1528,6 +1528,37 @@ lstm_gt %>%
       domain = NULL
     )
   )
+################################################################################
+# Test results table
+
+final_perf_df <- data.frame(
+  Metric = c("Accuracy", "Ordinal MAE", "Weighted Kappa"),
+  Value  = c(lstm_test_acc, lstm_test_mae, lstm_test_kappa)
+)
+
+final_perf_gt <- final_perf_df %>%
+  gt() %>%
+  cols_label(
+    Metric = "Metric",
+    Value  = "Test Value"
+  ) %>%
+  fmt_number(
+    columns = Value,
+    decimals = 4
+  ) %>%
+  tab_header(
+    title = "Final Test Performance of Selected LSTM Model"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  )
+
+final_perf_gt
 
 ################################################################################
 # Parameter count table
@@ -1589,6 +1620,48 @@ cm_gt <- cm_df %>%
   )
 
 cm_gt
+
+# Row-wise percentages
+cm_prop <- prop.table(lstm_test_cm, margin = 1)
+
+# Convert to %
+cm_pct <- round(cm_prop * 100, 1)
+
+cm_pct_df <- as.data.frame.matrix(cm_pct)
+
+cm_pct_df$Actual <- rownames(cm_pct_df)
+cm_pct_df <- cm_pct_df[, c("Actual", setdiff(names(cm_pct_df), "Actual"))]
+
+cm_pct_gt <- cm_pct_df %>%
+  gt() %>%
+  
+  cols_label(
+    Actual = "Actual"
+  ) %>%
+  
+  tab_header(
+    title = "Confusion Matrix (%) for Final LSTM Model"
+  ) %>%
+  
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  
+  fmt_number(
+    columns = -Actual,
+    decimals = 1
+  ) %>%
+  
+  data_color(
+    columns = -Actual,
+    fn = scales::col_numeric(
+      palette = c("#f7fbff", "#6baed6", "#08306b"),
+      domain = c(0, 100)
+    )
+  )
+
+cm_pct_gt
 
 ################################################################################
 # Best model train/validation plot
