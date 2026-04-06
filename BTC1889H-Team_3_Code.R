@@ -1127,6 +1127,181 @@ if (F) {
 # 3) Generate plots and tables
 # ============================================================
 
+################################################################################
+# Validation results table
+
+rnn_gt <- rnn_val_results %>%
+  arrange(desc(Val_Kappa), Val_OrdMAE, desc(Val_Acc)) %>%
+  gt() %>%
+  cols_label(
+    Model       = "Model",
+    Val_Kappa   = "Weighted Kappa",
+    Val_OrdMAE  = "Ordinal MAE",
+    Val_Acc     = "Accuracy"
+  ) %>%
+  fmt_number(
+    columns = c(Val_Kappa, Val_OrdMAE, Val_Acc),
+    decimals = 4
+  ) %>%
+  tab_header(
+    title = "Validation Performance of RNN Models"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  )
+
+rnn_gt
+
+rnn_gt %>%
+  data_color(
+    columns = Val_Kappa,
+    fn = scales::col_numeric(
+      palette = c("#f7fbff", "#6baed6", "#08306b"),
+      domain = NULL
+    )
+  )
+rnn_gt
+
+################################################################################
+# Test results table
+
+rnn_final_perf_df <- data.frame(
+  Metric = c("Accuracy", "Ordinal MAE", "Weighted Kappa"),
+  Value  = c(rnn_test_acc, rnn_test_mae, rnn_test_kappa)
+)
+
+rnn_final_perf_gt <- rnn_final_perf_df %>%
+  gt() %>%
+  cols_label(
+    Metric = "Metric",
+    Value  = "Test Value"
+  ) %>%
+  fmt_number(
+    columns = Value,
+    decimals = 4
+  ) %>%
+  tab_header(
+    title = "Final Test Performance of Selected RNN Model"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  )
+
+rnn_final_perf_gt
+
+################################################################################
+# Parameter count table
+
+rnn_param_gt <- rnn_param_table %>%
+  arrange(Total_Params) %>%
+  gt() %>%
+  cols_label(
+    Model = "Model",
+    Total_Params = "Total Parameters"
+  ) %>%
+  fmt_number(
+    columns = Total_Params,
+    sep_mark = ",",
+    decimals = 0
+  ) %>%
+  tab_header(
+    title = "Parameter Counts for Candidate RNN Architectures"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  )
+
+rnn_param_gt
+
+################################################################################
+# Confusion matrix for best model
+
+rnn_test_cm <- table(Actual = y_test, Predicted = rnn_test_preds)
+
+rnn_cm_df <- as.data.frame.matrix(rnn_test_cm)
+
+rnn_cm_gt <- rnn_cm_df %>%
+  rownames_to_column(var = "Actual") %>%
+  gt() %>%
+  cols_label(
+    Actual = "Actual"
+  ) %>%
+  tab_header(
+    title = "Confusion Matrix for Final RNN Model"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  fmt_number(
+    columns = -Actual,
+    decimals = 0
+  ) %>%
+  data_color(
+    columns = -Actual,
+    fn = scales::col_numeric(
+      palette = c("#f7fbff", "#6baed6", "#08306b"),
+      domain = NULL
+    )
+  )
+
+rnn_cm_gt
+
+################################################################################
+# Row-wise percentages
+
+rnn_cm_prop <- prop.table(rnn_test_cm, margin = 1)
+rnn_cm_pct <- round(rnn_cm_prop * 100, 1)
+
+rnn_cm_pct_df <- as.data.frame.matrix(rnn_cm_pct)
+
+rnn_cm_pct_df$Actual <- rownames(rnn_cm_pct_df)
+rnn_cm_pct_df <- rnn_cm_pct_df[, c("Actual", setdiff(names(rnn_cm_pct_df), "Actual"))]
+
+rnn_cm_pct_gt <- rnn_cm_pct_df %>%
+  gt() %>%
+  cols_label(
+    Actual = "Actual"
+  ) %>%
+  tab_header(
+    title = "Confusion Matrix (%) for Final RNN Model"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  fmt_number(
+    columns = -Actual,
+    decimals = 1
+  ) %>%
+  data_color(
+    columns = -Actual,
+    fn = scales::col_numeric(
+      palette = c("#f7fbff", "#6baed6", "#08306b"),
+      domain = c(0, 100)
+    )
+  )
+
+rnn_cm_pct_gt
+
+################################################################################
+# Best model train/validation plot
+
 rnn_history_plot <- rnn_histories[[rnn_best_name]]
 
 rnn_df <- data.frame(
