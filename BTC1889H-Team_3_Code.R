@@ -545,6 +545,8 @@ if (F) {
     "\n--- Retraining best FF model (", ff_best_name,
     ") on full training set ---\n"
   )
+  
+  set.seed(123)
 
   set.seed(123)
 
