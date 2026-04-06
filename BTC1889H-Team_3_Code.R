@@ -1231,11 +1231,130 @@ if (F) {
 # ============================================================
 # 4) Generate plots and tables
 # ============================================================
-
 library(ggplot2)
 library(patchwork)
+library(gt)
+library(dplyr)
+library(scales)
+library(tibble)
 
-# Use the validation history from the selected model
+################################################################################
+# Validation results table
+lstm_gt <- val_results %>%
+  arrange(desc(Val_Kappa), Val_OrdMAE, desc(Val_Acc)) %>%
+  gt() %>%
+  
+  cols_label(
+    Model       = "Model",
+    Val_Kappa   = "Weighted Kappa",
+    Val_OrdMAE  = "Ordinal MAE",
+    Val_Acc     = "Accuracy"
+  ) %>%
+  
+  fmt_number(
+    columns = c(Val_Kappa, Val_OrdMAE, Val_Acc),
+    decimals = 4
+  ) %>%
+  
+  tab_header(
+    title = "Validation Performance of LSTM Models"
+  ) %>%
+  
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  )
+
+lstm_gt
+
+lstm_gt %>%
+  data_color(
+    columns = Val_Kappa,
+    fn = scales::col_numeric(
+      palette = c("#f7fbff", "#6baed6", "#08306b"),
+      domain = NULL
+    )
+  )
+
+################################################################################
+# Parameter count table
+table_y <- param_table %>%
+  arrange(Total_Params) %>%
+  gt() %>%
+  cols_label(
+    Model = "Model",
+    Total_Params = "Total Parameters"
+  ) %>%
+  fmt_number(
+    columns = Total_Params,
+    sep_mark = ",",
+    decimals = 0
+  ) %>%
+  tab_header(
+    title = "Parameter Counts for Candidate LSTM Architectures"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  )
+
+table_y
+
+################################################################################
+# Confusion matrix for best model
+test_cm <- table(Actual = y_test, Predicted = test_preds)
+
+cm_df <- as.data.frame.matrix(test_cm)
+
+cm_gt <- cm_df %>%
+  rownames_to_column(var = "Actual") %>%
+  gt() %>%
+  
+  cols_label(
+    Actual = "Actual"
+  ) %>%
+  
+  tab_header(
+    title = "Confusion Matrix for Final LSTM Model"
+  ) %>%
+  
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  
+  fmt_number(
+    columns = -Actual,
+    decimals = 0
+  ) %>%
+  
+  data_color(
+    columns = -Actual,
+    fn = scales::col_numeric(
+      palette = c("#f7fbff", "#6baed6", "#08306b"),
+      domain = NULL
+    )
+  )
+cm_gt %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(
+      rows = Actual == colnames(cm_df),
+      columns = -Actual
+    )
+  )
+cm_gt
+################################################################################
+# Best model train/validation plot
 history_plot <- histories[[best_name]]
 
 # Build data frame
@@ -1306,11 +1425,3 @@ final_fig <- (p_acc / p_loss / p_mae) +
   )
 
 final_fig
-
-ggsave(
-  filename = "lstm_training_curves.png",
-  plot = final_fig,
-  width = 12,
-  height = 12,
-  dpi = 300
-)
