@@ -257,7 +257,7 @@ metric_ordinal_mae <- custom_metric(
 
     # Keep original version of y_true handling
     y_true_class <- op_cast(y_true, "float32")
-
+    
     # Mean absolute difference between class indices
     op_mean(op_abs(y_true_class - y_pred_class))
   }
@@ -324,6 +324,38 @@ early_stop <- callback_early_stopping(
   # After stopping, revert model to the epoch with the best validation loss
   restore_best_weights = TRUE
 )
+# ============================================================
+# 27) Create one global stratified validation split
+# ============================================================
+# This validation set will be reused for FF, RNN, and LSTM so that all
+# model families are compared on the exact same observations.
+
+set.seed(123)
+
+# For each class, sample 20% of indices into the validation set
+val_idx <- unlist(lapply(split(seq_along(y_train), y_train), function(idx) {
+  sample(idx, size = floor(length(idx) * val_split))
+}))
+
+# Keep indices sorted for easier inspection/reproducibility
+val_idx <- sort(val_idx)
+
+# Training indices are everything not in validation
+train_idx <- setdiff(seq_len(nrow(x_train)), val_idx)
+
+# Final stratified split
+x_train_model <- x_train[train_idx, , drop = FALSE]
+y_train_model <- y_train[train_idx]
+
+x_val <- x_train[val_idx, , drop = FALSE]
+y_val <- y_train[val_idx]
+
+# Check class distributions
+cat("Training set class distribution:\n")
+print(prop.table(table(y_train_model)))
+
+cat("\nValidation set class distribution:\n")
+print(prop.table(table(y_val)))
 
 ###############################################################################
 # SECTION B — FEED-FORWARD MODEL
@@ -781,13 +813,8 @@ if (F) {
   # ============================================================
   # 2b) Train all four models
   # ============================================================
-  n_val <- floor(nrow(x_train) * val_split)
-  n_train <- nrow(x_train) - n_val
-  val_idx <- (n_train + 1):nrow(x_train)
-
-  x_val <- x_train[val_idx, , drop = FALSE]
-  y_val <- y_train[val_idx]
-
+  # All models use the same global stratified validation set.
+  
   histories <- list()
   models <- list()
 
@@ -798,11 +825,11 @@ if (F) {
     compile_model(model)
 
     histories[[nm]] <- model |> fit(
-      x_train, y_train,
-      epochs = epochs,
-      batch_size = batch_size,
-      validation_split = val_split,
-      verbose = 1
+      x_train_model, y_train_model,
+      epochs          = epochs,
+      batch_size      = batch_size,
+      validation_data = list(x_val, y_val),
+      verbose         = 1
     )
 
     models[[nm]] <- model
@@ -811,6 +838,11 @@ if (F) {
   # ============================================================
   # 2c) Compare validation performance
   # ============================================================
+  # Models are ranked using:
+  # 1. highest validation weighted kappa
+  # 2. lowest validation ordinal MAE
+  # 3. highest validation accuracy
+  
   val_results <- do.call(rbind, lapply(names(models), function(nm) {
     val_probs <- models[[nm]] |> predict(x_val, verbose = 0)
     val_preds <- apply(val_probs, 1, which.max) - 1L
@@ -948,3 +980,90 @@ if (F) {
   cat("\nPer-class accuracy:\n")
   print(round(diag(test_cm) / rowSums(test_cm), 3))
 }
+
+# ============================================================
+# 4) Generate plots and tables
+# ============================================================
+
+library(ggplot2)
+library(patchwork)
+
+# Use the validation history from the selected model
+history_plot <- histories[[best_name]]
+
+# Build data frame
+df <- data.frame(
+  epoch    = 1:length(history_plot$metrics$loss),
+  loss     = history_plot$metrics$loss,
+  val_loss = history_plot$metrics$val_loss,
+  acc      = history_plot$metrics$sparse_categorical_accuracy,
+  val_acc  = history_plot$metrics$val_sparse_categorical_accuracy,
+  mae      = history_plot$metrics$ordinal_mae,
+  val_mae  = history_plot$metrics$val_ordinal_mae
+)
+
+# Common theme
+pub_theme <- theme_minimal(base_size = 12) +
+  theme(
+    plot.title      = element_text(face = "bold", size = 12, hjust = 0.5),
+    axis.title      = element_text(face = "bold"),
+    legend.position = "bottom",
+    legend.title    = element_blank(),
+    panel.grid.minor = element_blank(),
+    strip.text      = element_text(face = "bold")
+  )
+
+# Accuracy panel
+p_acc <- ggplot(df, aes(x = epoch)) +
+  geom_line(aes(y = acc, color = "Training"), linewidth = 1) +
+  geom_line(aes(y = val_acc, color = "Validation"), linewidth = 1) +
+  labs(
+    title = "Accuracy",
+    x = "Epoch",
+    y = "Accuracy"
+  ) +
+  scale_color_manual(values = c("Training" = "#1f77b4", "Validation" = "#d62728")) +
+  pub_theme
+
+# Loss panel
+p_loss <- ggplot(df, aes(x = epoch)) +
+  geom_line(aes(y = loss, color = "Training"), linewidth = 1) +
+  geom_line(aes(y = val_loss, color = "Validation"), linewidth = 1) +
+  labs(
+    title = "Loss",
+    x = "Epoch",
+    y = "Loss"
+  ) +
+  scale_color_manual(values = c("Training" = "#1f77b4", "Validation" = "#d62728")) +
+  pub_theme
+
+# Ordinal MAE panel
+p_mae <- ggplot(df, aes(x = epoch)) +
+  geom_line(aes(y = mae, color = "Training"), linewidth = 1) +
+  geom_line(aes(y = val_mae, color = "Validation"), linewidth = 1) +
+  labs(
+    title = "Ordinal MAE",
+    x = "Epoch",
+    y = "Ordinal MAE"
+  ) +
+  scale_color_manual(values = c("Training" = "#1f77b4", "Validation" = "#d62728")) +
+  pub_theme
+
+# Combine into one publication-ready figure
+final_fig <- (p_acc / p_loss / p_mae) +
+  plot_annotation(
+    title = "Training and Validation Performance of the Selected Stacked LSTM Model",
+    theme = theme(
+      plot.title = element_text(face = "bold", size = 14, hjust = 0.5)
+    )
+  )
+
+final_fig
+
+ggsave(
+  filename = "lstm_training_curves.png",
+  plot = final_fig,
+  width = 12,
+  height = 12,
+  dpi = 300
+)
