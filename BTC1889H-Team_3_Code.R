@@ -312,6 +312,39 @@ final_val <- function(history, metric) {
   round(tail(vals, 1), 4)
 }
 
+# ============================================================
+# 27) Create one global stratified validation split
+# ============================================================
+# This validation set will be reused for FF, RNN, and LSTM so that all
+# model families are compared on the exact same observations.
+
+set.seed(123)
+
+# For each class, sample 20% of indices into the validation set
+val_idx <- unlist(lapply(split(seq_along(y_train), y_train), function(idx) {
+  sample(idx, size = floor(length(idx) * val_split))
+}))
+
+# Keep indices sorted for easier inspection/reproducibility
+val_idx <- sort(val_idx)
+
+# Training indices are everything not in validation
+train_idx <- setdiff(seq_len(nrow(x_train)), val_idx)
+
+# Final stratified split
+x_train_model <- x_train[train_idx, , drop = FALSE]
+y_train_model <- y_train[train_idx]
+
+x_val <- x_train[val_idx, , drop = FALSE]
+y_val <- y_train[val_idx]
+
+# Check class distributions
+cat("Training set class distribution:\n")
+print(prop.table(table(y_train_model)))
+
+cat("\nValidation set class distribution:\n")
+print(prop.table(table(y_val)))
+
 ###############################################################################
 # SECTION B — FEED-FORWARD MODEL
 ###############################################################################
@@ -446,7 +479,7 @@ builders <- list(
 # 2) Run full LSTM workflow or load saved outputs
 # ============================================================
 # Set to TRUE only when you want to rerun all LSTM modelling steps.
-if (T) {
+if (F) {
   
   # ============================================================
   # 2a) Print model summaries
@@ -479,12 +512,7 @@ if (T) {
   # ============================================================
   # 2b) Train all four models
   # ============================================================
-  n_val   <- floor(nrow(x_train) * val_split)
-  n_train <- nrow(x_train) - n_val
-  val_idx <- (n_train + 1):nrow(x_train)
-  
-  x_val <- x_train[val_idx, , drop = FALSE]
-  y_val <- y_train[val_idx]
+  # All models use the same global stratified validation set.
   
   histories <- list()
   models    <- list()
@@ -496,11 +524,11 @@ if (T) {
     compile_model(model)
     
     histories[[nm]] <- model |> fit(
-      x_train, y_train,
-      epochs           = epochs,
-      batch_size       = batch_size,
-      validation_split = val_split,
-      verbose          = 1
+      x_train_model, y_train_model,
+      epochs          = epochs,
+      batch_size      = batch_size,
+      validation_data = list(x_val, y_val),
+      verbose         = 1
     )
     
     models[[nm]] <- model
@@ -509,6 +537,11 @@ if (T) {
   # ============================================================
   # 2c) Compare validation performance
   # ============================================================
+  # Models are ranked using:
+  # 1. highest validation weighted kappa
+  # 2. lowest validation ordinal MAE
+  # 3. highest validation accuracy
+  
   val_results <- do.call(rbind, lapply(names(models), function(nm) {
     val_probs <- models[[nm]] |> predict(x_val, verbose = 0)
     val_preds <- apply(val_probs, 1, which.max) - 1L
