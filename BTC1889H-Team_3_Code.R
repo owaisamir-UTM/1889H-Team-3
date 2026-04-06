@@ -26,7 +26,7 @@ library(keras3)
 # 2) Read training and test datasets
 # ============================================================
 train <- read.csv("data/Corona_NLP_train.csv", stringsAsFactors = FALSE)
-test  <- read.csv("data/Corona_NLP_test.csv", stringsAsFactors = FALSE)
+test <- read.csv("data/Corona_NLP_test.csv", stringsAsFactors = FALSE)
 
 # ============================================================
 # 3) Explore raw data structure
@@ -49,13 +49,13 @@ head(test)
 # Sentiment     = target label
 # ============================================================
 train <- train[, c("OriginalTweet", "Sentiment")]
-test  <- test[, c("OriginalTweet", "Sentiment")]
+test <- test[, c("OriginalTweet", "Sentiment")]
 
 # ============================================================
 # 5) Save raw tweet text before cleaning
 # ============================================================
 train_tweets_raw <- train$OriginalTweet
-test_tweets_raw  <- test$OriginalTweet
+test_tweets_raw <- test$OriginalTweet
 
 # ============================================================
 # 6) Check for missing values and empty labels
@@ -89,12 +89,12 @@ clean_text <- function(x) {
   x <- gsub("\u0095", " ", x, fixed = TRUE)
   x <- gsub("\u0096", " ", x, fixed = TRUE)
   x <- gsub("\u0097", " ", x, fixed = TRUE)
-  
+
   x <- gsub("\\\\u0092", "'", x)
   x <- gsub("\\\\u0093|\\\\u0094", "\"", x)
   x <- gsub("\\\\u0095|\\\\u0096|\\\\u0097", " ", x)
   x <- gsub("\\\\xc2", "", x)
-  
+
   x <- gsub("http\\S+|www\\S+", " ", x)
   x <- gsub("@\\w+", " ", x)
   x <- gsub("\\bRT\\b", " ", x)
@@ -103,7 +103,7 @@ clean_text <- function(x) {
   x <- gsub("\n", " ", x)
   x <- gsub("\\s+", " ", x)
   x <- trimws(x)
-  
+
   return(x)
 }
 
@@ -111,7 +111,7 @@ clean_text <- function(x) {
 # 9) Apply the cleaning function
 # ============================================================
 train$OriginalTweet <- clean_text(train$OriginalTweet)
-test$OriginalTweet  <- clean_text(test$OriginalTweet)
+test$OriginalTweet <- clean_text(test$OriginalTweet)
 
 # ============================================================
 # 10) Compare raw vs cleaned tweets for changed rows
@@ -138,7 +138,7 @@ sum(trimws(test$OriginalTweet) == "", na.rm = TRUE)
 # \S+ counts sequences of non-space characters
 # ============================================================
 tweet_lengths <- str_count(train$OriginalTweet, "\\S+")
-test_lengths  <- str_count(test$OriginalTweet, "\\S+")
+test_lengths <- str_count(test$OriginalTweet, "\\S+")
 
 # ============================================================
 # 13) Inspect rows that became empty after cleaning
@@ -157,13 +157,13 @@ data.frame(
 # 14) Remove tweets with 0 words after cleaning
 # ============================================================
 train <- train[tweet_lengths > 0, ]
-test  <- test[test_lengths > 0, ]
+test <- test[test_lengths > 0, ]
 
 # ============================================================
 # 15) Recalculate tweet lengths after removing empty rows
 # ============================================================
 tweet_lengths <- str_count(train$OriginalTweet, "\\S+")
-test_lengths  <- str_count(test$OriginalTweet, "\\S+")
+test_lengths <- str_count(test$OriginalTweet, "\\S+")
 
 # ============================================================
 # 16) Choose preprocessing parameters
@@ -174,7 +174,7 @@ quantile(tweet_lengths, probs = c(0.50, 0.75, 0.90, 0.95, 0.99))
 
 # Most tweets are under 50 words
 num_words <- 10000
-maxlen    <- 50
+maxlen <- 50
 
 # ============================================================
 # 17) Create text vectorization layer
@@ -211,12 +211,12 @@ head(word_index, 30)
 # 21) Convert tweets into integer sequences
 # ============================================================
 seq_tensor_train <- vec(train$OriginalTweet)
-seq_tensor_test  <- vec(test$OriginalTweet)
+seq_tensor_test <- vec(test$OriginalTweet)
 
 class(seq_tensor_train)
 
 x_train <- as.array(seq_tensor_train)
-x_test  <- as.array(seq_tensor_test)
+x_test <- as.array(seq_tensor_test)
 
 dim(x_train)
 dim(x_test)
@@ -235,10 +235,10 @@ label_levels <- c(
 )
 
 train$Sentiment <- factor(train$Sentiment, levels = label_levels)
-test$Sentiment  <- factor(test$Sentiment, levels = label_levels)
+test$Sentiment <- factor(test$Sentiment, levels = label_levels)
 
 y_train <- as.integer(train$Sentiment) - 1
-y_test  <- as.integer(test$Sentiment) - 1
+y_test <- as.integer(test$Sentiment) - 1
 
 # ============================================================
 # 23) Check encoded label distributions
@@ -252,13 +252,12 @@ table(y_test)
 metric_ordinal_mae <- custom_metric(
   "ordinal_mae",
   function(y_true, y_pred) {
-    
     # Take argmax of softmax output to get predicted class
     y_pred_class <- op_cast(op_argmax(y_pred, axis = -1L), "float32")
-    
+
     # Keep original version of y_true handling
-    y_true_class <- op_cast(op_argmax(y_true, axis = -1L), "float32")
-    
+    y_true_class <- op_cast(y_true, "float32")
+
     # Mean absolute difference between class indices
     op_mean(op_abs(y_true_class - y_pred_class))
   }
@@ -267,17 +266,19 @@ metric_ordinal_mae <- custom_metric(
 # Compute quadratic weighted kappa from predicted classes
 compute_weighted_kappa <- function(actual, predicted, k = 5) {
   cm <- matrix(0L, nrow = k, ncol = k)
-  
+
   for (i in seq_along(actual)) {
     cm[actual[i] + 1L, predicted[i] + 1L] <-
       cm[actual[i] + 1L, predicted[i] + 1L] + 1L
   }
-  
+
   n <- sum(cm)
-  w <- outer(0:(k - 1), 0:(k - 1),
-             function(i, j) (i - j)^2 / (k - 1)^2)
+  w <- outer(
+    0:(k - 1), 0:(k - 1),
+    function(i, j) (i - j)^2 / (k - 1)^2
+  )
   E <- outer(rowSums(cm), colSums(cm)) / n
-  
+
   round(1 - sum(w * cm) / sum(w * E), 4)
 }
 
@@ -285,11 +286,11 @@ compute_weighted_kappa <- function(actual, predicted, k = 5) {
 # 25) Set global model parameters
 # ============================================================
 embedding_dim <- 64
-lstm_units    <- 64
-num_classes   <- 5
-batch_size    <- 32
-epochs        <- 10
-val_split     <- 0.2
+num_units <- 64
+num_classes <- 5
+batch_size <- 32
+epochs <- 10
+val_split <- 0.2
 
 # ============================================================
 # 26) Define helper functions
@@ -308,9 +309,21 @@ compile_model <- function(model) {
 # Extract the final epoch value of a validation metric
 final_val <- function(history, metric) {
   vals <- history$metrics[[metric]]
-  if (is.null(vals)) return(NA_real_)
+  if (is.null(vals)) {
+    return(NA_real_)
+  }
   round(tail(vals, 1), 4)
 }
+
+# Early stopping callback to avoid overfitting
+early_stop <- callback_early_stopping(
+  # Track the validation loss after each epoch
+  monitor = "val_loss",
+  # Wait for 5 epochs without improvement before stopping
+  patience = 5,
+  # After stopping, revert model to the epoch with the best validation loss
+  restore_best_weights = TRUE
+)
 
 ###############################################################################
 # SECTION B — FEED-FORWARD MODEL
@@ -332,6 +345,296 @@ final_val <- function(history, metric) {
 # 10) Save results
 
 
+# ============================================================
+# 1) Define model builder functions
+# ============================================================
+
+# Baseline:
+# Embedding -> GlobalAveragePooling -> Dense(ReLU) -> Dense(softmax)
+build_ff_baseline <- function() {
+  keras_model_sequential(name = "ff_baseline") |>
+    layer_embedding(
+      input_dim    = num_words,
+      output_dim   = embedding_dim,
+      input_length = maxlen
+    ) |>
+    layer_global_average_pooling_1d() |>
+    layer_dense(units = num_units, activation = "relu") |>
+    layer_dense(units = num_classes, activation = "softmax")
+}
+
+# Baseline + Dropout:
+# Embedding -> GlobalAveragePooling -> Dense(ReLU) -> Dropout -> Dense(softmax)
+build_ff_baseline_dropout <- function() {
+  keras_model_sequential(name = "ff_baseline_dropout") |>
+    layer_embedding(
+      input_dim    = num_words,
+      output_dim   = embedding_dim,
+      input_length = maxlen
+    ) |>
+    layer_global_average_pooling_1d() |>
+    layer_dense(units = num_units, activation = "relu") |>
+    layer_dropout(rate = 0.3) |>
+    layer_dense(units = num_classes, activation = "softmax")
+}
+
+# Stacked:
+# Embedding -> GlobalAveragePooling -> Dense(ReLU) -> Dense(ReLU) -> Dense(softmax)
+build_ff_stacked <- function() {
+  keras_model_sequential(name = "ff_stacked") |>
+    layer_embedding(
+      input_dim    = num_words,
+      output_dim   = embedding_dim,
+      input_length = maxlen
+    ) |>
+    layer_global_average_pooling_1d() |>
+    layer_dense(units = num_units, activation = "relu") |>
+    layer_dense(units = num_units, activation = "relu") |>
+    layer_dense(units = num_classes, activation = "softmax")
+}
+
+# Stacked + Dropout:
+# Embedding -> GlobalAveragePooling -> Dense(ReLU) -> Dropout
+#           -> Dense(ReLU) -> Dropout -> Dense(softmax)
+build_ff_stacked_dropout <- function() {
+  keras_model_sequential(name = "ff_stacked_dropout") |>
+    layer_embedding(
+      input_dim    = num_words,
+      output_dim   = embedding_dim,
+      input_length = maxlen
+    ) |>
+    layer_global_average_pooling_1d() |>
+    layer_dense(units = num_units, activation = "relu") |>
+    layer_dropout(rate = 0.3) |>
+    layer_dense(units = num_units, activation = "relu") |>
+    layer_dropout(rate = 0.3) |>
+    layer_dense(units = num_classes, activation = "softmax")
+}
+
+ff_builders <- list(
+  ff_baseline         = build_ff_baseline,
+  ff_baseline_dropout = build_ff_baseline_dropout,
+  ff_stacked          = build_ff_stacked,
+  ff_stacked_dropout  = build_ff_stacked_dropout
+)
+
+# ============================================================
+# 2) Run full FF workflow or load saved outputs
+# ============================================================
+# Set to TRUE only when you want to rerun all FF modelling steps
+if (TRUE) {
+  # ============================================================
+  # 2a) Print model summaries
+  # ============================================================
+  cat("========== FF Model Architecture Summaries ==========\n")
+
+  ff_param_table <- lapply(names(ff_builders), function(nm) {
+    ff_model <- ff_builders[[nm]]()
+    compile_model(ff_model)
+
+    # Force model to build before printing summary
+    dummy <- matrix(1L, nrow = 1, ncol = maxlen)
+    invisible(ff_model(dummy))
+
+    cat("\n---", nm, "---\n")
+    summary(ff_model)
+
+    data.frame(
+      Model = nm,
+      Total_Params = as.integer(count_params(ff_model)),
+      stringsAsFactors = FALSE
+    )
+  })
+
+  ff_param_table <- do.call(rbind, ff_param_table)
+
+  cat("\n========== FF Parameter Count Summary ==========\n")
+  print(ff_param_table, row.names = FALSE)
+
+  # ============================================================
+  # 2b) Train all four FF models
+  # ============================================================
+  # Create a fixed validation split for consistent comparison
+  n_val <- floor(nrow(x_train) * val_split)
+  n_train <- nrow(x_train) - n_val
+  val_idx <- (n_train + 1):nrow(x_train)
+
+  x_val <- x_train[val_idx, , drop = FALSE]
+  y_val <- y_train[val_idx]
+
+  ff_histories <- list()
+  ff_models <- list()
+
+  for (nm in names(ff_builders)) {
+    cat("\n--- Training:", nm, "---\n")
+
+    ff_model <- ff_builders[[nm]]()
+    compile_model(ff_model)
+
+    ff_histories[[nm]] <- ff_model |> fit(
+      x_train[1:n_train, ],
+      y_train[1:n_train],
+      epochs = epochs,
+      batch_size = batch_size,
+      validation_data = list(x_val, y_val),
+      verbose = 1,
+      callbacks = list(early_stop)
+    )
+
+    ff_models[[nm]] <- ff_model
+  }
+
+  # =========================================================
+  # 2c) Compare validation performance
+  # ============================================================
+  ff_val_results <- do.call(rbind, lapply(names(ff_models), function(nm) {
+    val_probs <- ff_models[[nm]] |> predict(x_val, verbose = 0)
+    val_preds <- apply(val_probs, 1, which.max) - 1L
+
+    data.frame(
+      Model = nm,
+      Val_Kappa = compute_weighted_kappa(y_val, val_preds),
+      Val_OrdMAE = final_val(ff_histories[[nm]], "val_ordinal_mae"),
+      Val_Acc = final_val(ff_histories[[nm]], "val_sparse_categorical_accuracy"),
+      stringsAsFactors = FALSE
+    )
+  }))
+
+  cat("\n========== FF Validation Comparison ==========\n")
+  print(ff_val_results, row.names = FALSE)
+  cat("===============================================\n")
+
+  # ============================================================
+  # 2d) Select the best FF model
+  # ============================================================
+  # Rank models by kappa (primary), then ordinal MAE, then accuracy
+  ff_val_results$rank_kappa <- rank(-ff_val_results$Val_Kappa, ties.method = "first")
+  ff_val_results$rank_mae <- rank(ff_val_results$Val_OrdMAE, ties.method = "first")
+  ff_val_results$rank_acc <- rank(-ff_val_results$Val_Acc, ties.method = "first")
+
+  ff_val_results <- ff_val_results[
+    order(
+      ff_val_results$rank_kappa,
+      ff_val_results$rank_mae,
+      ff_val_results$rank_acc
+    ),
+  ]
+
+  ff_best_name <- ff_val_results$Model[1]
+
+  cat("\nBest FF model:", ff_best_name, "\n")
+  cat("  Validation Kappa  :", ff_val_results$Val_Kappa[1], "\n")
+  cat("  Validation OrdMAE :", ff_val_results$Val_OrdMAE[1], "\n")
+  cat("  Validation Acc    :", ff_val_results$Val_Acc[1], "\n")
+
+  # Keep only the main comparison columns
+  ff_val_results <- ff_val_results[
+    ,
+    c("Model", "Val_Kappa", "Val_OrdMAE", "Val_Acc")
+  ]
+
+  # ============================================================
+  # 2e) Retrain the best FF model on the full training set
+  # ============================================================
+  cat(
+    "\n--- Retraining best FF model (", ff_best_name,
+    ") on full training set ---\n"
+  )
+
+  ff_best_model <- ff_builders[[ff_best_name]]()
+  compile_model(ff_best_model)
+
+  ff_history_best <- ff_best_model |> fit(
+    x_train, y_train,
+    epochs = epochs,
+    batch_size = batch_size,
+    verbose = 1
+  )
+
+  save_model(ff_best_model, "best_ff_model.keras")
+  cat("Best FF model saved to best_ff_model.keras\n")
+
+  # ============================================================
+  # 2f) Evaluate the best FF model on the test set
+  # ============================================================
+  cat("\n--- Test Set Evaluation:", ff_best_name, "---\n")
+
+  ff_test_eval <- ff_best_model |> evaluate(x_test, y_test, verbose = 0)
+  ff_test_probs <- ff_best_model |> predict(x_test, verbose = 0)
+  ff_test_preds <- apply(ff_test_probs, 1, which.max) - 1L
+
+  ff_test_acc <- round(as.numeric(ff_test_eval[["sparse_categorical_accuracy"]]), 4)
+  ff_test_mae <- round(as.numeric(ff_test_eval[["ordinal_mae"]]), 4)
+  ff_test_kappa <- compute_weighted_kappa(y_test, ff_test_preds)
+
+  cat("  Accuracy       :", ff_test_acc, "\n")
+  cat("  Ordinal MAE    :", ff_test_mae, "\n")
+  cat("  Weighted Kappa :", ff_test_kappa, "\n")
+
+  ff_test_cm <- table(Actual = y_test, Predicted = ff_test_preds)
+
+  cat("\nConfusion Matrix:\n")
+  print(ff_test_cm)
+
+  cat("\nPer-class accuracy:\n")
+  print(round(diag(ff_test_cm) / rowSums(ff_test_cm), 3))
+
+  # ============================================================
+  # 2g) Save FF results
+  # ============================================================
+  save(
+    ff_param_table,
+    ff_histories,
+    ff_val_results,
+    ff_best_name,
+    ff_history_best,
+    ff_test_eval,
+    ff_test_probs,
+    ff_test_preds,
+    ff_test_cm,
+    ff_test_acc,
+    ff_test_mae,
+    ff_test_kappa,
+    file = "ff_results.RData"
+  )
+
+  cat("\nFF results saved to ff_results.RData\n")
+} else {
+  # ============================================================
+  # 3a) Load saved FF model and results
+  # ============================================================
+  cat("\n--- Loading saved FF model and results ---\n")
+
+  ff_best_model <- load_model(
+    "best_ff_model.keras",
+    custom_objects = list(ordinal_mae = metric_ordinal_mae)
+  )
+  load("ff_results.RData")
+
+  cat("Loaded best FF model:", ff_best_name, "\n")
+  cat("Loaded results from ff_results.RData\n")
+
+  # ============================================================
+  # 3b) Reprint saved outputs
+  # ============================================================
+  cat("\n========== FF Parameter Count Summary ==========\n")
+  print(ff_param_table, row.names = FALSE)
+
+  cat("\n========== FF Validation Comparison ==========\n")
+  print(ff_val_results, row.names = FALSE)
+  cat("===============================================\n")
+
+  cat("\n--- Saved FF Test Results ---\n")
+  cat("  Accuracy       :", ff_test_acc, "\n")
+  cat("  Ordinal MAE    :", ff_test_mae, "\n")
+  cat("  Weighted Kappa :", ff_test_kappa, "\n")
+
+  cat("\nConfusion Matrix:\n")
+  print(ff_test_cm)
+
+  cat("\nPer-class accuracy:\n")
+  print(round(diag(ff_test_cm) / rowSums(ff_test_cm), 3))
+}
 ###############################################################################
 # SECTION C — RNN MODEL
 ###############################################################################
@@ -369,7 +672,7 @@ build_baseline <- function() {
       output_dim   = embedding_dim,
       input_length = maxlen
     ) |>
-    layer_lstm(units = lstm_units) |>
+    layer_lstm(units = num_units) |>
     layer_dense(units = num_classes, activation = "softmax")
 }
 
@@ -383,7 +686,7 @@ build_baseline_dropout <- function() {
       input_length = maxlen
     ) |>
     layer_lstm(
-      units             = lstm_units,
+      units             = num_units,
       dropout           = 0.3,
       recurrent_dropout = 0.2
     ) |>
@@ -401,10 +704,10 @@ build_stacked <- function() {
       input_length = maxlen
     ) |>
     layer_lstm(
-      units            = lstm_units,
+      units            = num_units,
       return_sequences = TRUE
     ) |>
-    layer_lstm(units = lstm_units) |>
+    layer_lstm(units = num_units) |>
     layer_dense(units = num_classes, activation = "softmax")
 }
 
@@ -421,13 +724,13 @@ build_stacked_dropout <- function() {
       input_length = maxlen
     ) |>
     layer_lstm(
-      units             = lstm_units,
+      units             = num_units,
       dropout           = 0.3,
       recurrent_dropout = 0.2,
       return_sequences  = TRUE
     ) |>
     layer_lstm(
-      units             = lstm_units,
+      units             = num_units,
       dropout           = 0.3,
       recurrent_dropout = 0.2
     ) |>
@@ -447,148 +750,148 @@ builders <- list(
 # ============================================================
 # Set to TRUE only when you want to rerun all LSTM modelling steps.
 if (F) {
-  
   # ============================================================
   # 2a) Print model summaries
   # ============================================================
   cat("========== Model Architecture Summaries ==========\n")
-  
+
   param_table <- lapply(names(builders), function(nm) {
     model <- builders[[nm]]()
     compile_model(model)
-    
+
     # Force model to build before printing summary
     dummy <- matrix(1L, nrow = 1, ncol = maxlen)
     invisible(model(dummy))
-    
+
     cat("\n---", nm, "---\n")
     summary(model)
-    
+
     data.frame(
-      Model        = nm,
+      Model = nm,
       Total_Params = as.integer(count_params(model)),
       stringsAsFactors = FALSE
     )
   })
-  
+
   param_table <- do.call(rbind, param_table)
-  
+
   cat("\n========== Parameter Count Summary ==========\n")
   print(param_table, row.names = FALSE)
-  
+
   # ============================================================
   # 2b) Train all four models
   # ============================================================
-  n_val   <- floor(nrow(x_train) * val_split)
+  n_val <- floor(nrow(x_train) * val_split)
   n_train <- nrow(x_train) - n_val
   val_idx <- (n_train + 1):nrow(x_train)
-  
+
   x_val <- x_train[val_idx, , drop = FALSE]
   y_val <- y_train[val_idx]
-  
+
   histories <- list()
-  models    <- list()
-  
+  models <- list()
+
   for (nm in names(builders)) {
     cat("\n--- Training:", nm, "---\n")
-    
+
     model <- builders[[nm]]()
     compile_model(model)
-    
+
     histories[[nm]] <- model |> fit(
       x_train, y_train,
-      epochs           = epochs,
-      batch_size       = batch_size,
+      epochs = epochs,
+      batch_size = batch_size,
       validation_split = val_split,
-      verbose          = 1
+      verbose = 1
     )
-    
+
     models[[nm]] <- model
   }
-  
+
   # ============================================================
   # 2c) Compare validation performance
   # ============================================================
   val_results <- do.call(rbind, lapply(names(models), function(nm) {
     val_probs <- models[[nm]] |> predict(x_val, verbose = 0)
     val_preds <- apply(val_probs, 1, which.max) - 1L
-    
+
     data.frame(
-      Model      = nm,
-      Val_Kappa  = compute_weighted_kappa(y_val, val_preds),
+      Model = nm,
+      Val_Kappa = compute_weighted_kappa(y_val, val_preds),
       Val_OrdMAE = final_val(histories[[nm]], "val_ordinal_mae"),
-      Val_Acc    = final_val(histories[[nm]], "val_sparse_categorical_accuracy"),
+      Val_Acc = final_val(histories[[nm]], "val_sparse_categorical_accuracy"),
       stringsAsFactors = FALSE
     )
   }))
-  
+
   cat("\n========== Validation Comparison ==========\n")
   print(val_results, row.names = FALSE)
   cat("===========================================\n")
-  
+
   # ============================================================
   # 2d) Select the best model
   # ============================================================
-  val_results$rank_kappa <- rank(-val_results$Val_Kappa,  ties.method = "first")
-  val_results$rank_mae   <- rank( val_results$Val_OrdMAE, ties.method = "first")
-  val_results$rank_acc   <- rank(-val_results$Val_Acc,    ties.method = "first")
-  
+  val_results$rank_kappa <- rank(-val_results$Val_Kappa, ties.method = "first")
+  val_results$rank_mae <- rank(val_results$Val_OrdMAE, ties.method = "first")
+  val_results$rank_acc <- rank(-val_results$Val_Acc, ties.method = "first")
+
   val_results <- val_results[
-    order(val_results$rank_kappa, val_results$rank_mae, val_results$rank_acc), ]
-  
+    order(val_results$rank_kappa, val_results$rank_mae, val_results$rank_acc),
+  ]
+
   best_name <- val_results$Model[1]
-  
+
   cat("\nBest model:", best_name, "\n")
-  cat("  Validation Kappa  :", val_results$Val_Kappa[1],  "\n")
+  cat("  Validation Kappa  :", val_results$Val_Kappa[1], "\n")
   cat("  Validation OrdMAE :", val_results$Val_OrdMAE[1], "\n")
-  cat("  Validation Acc    :", val_results$Val_Acc[1],    "\n")
-  
+  cat("  Validation Acc    :", val_results$Val_Acc[1], "\n")
+
   # Keep only the main comparison columns
   val_results <- val_results[, c("Model", "Val_Kappa", "Val_OrdMAE", "Val_Acc")]
-  
+
   # ============================================================
   # 2e) Retrain the best model on the full training set
   # ============================================================
   cat("\n--- Retraining best model (", best_name, ") on full training set ---\n")
-  
+
   best_model <- builders[[best_name]]()
   compile_model(best_model)
-  
+
   history_best <- best_model |> fit(
     x_train, y_train,
-    epochs     = epochs,
+    epochs = epochs,
     batch_size = batch_size,
-    verbose    = 1
+    verbose = 1
   )
-  
+
   save_model(best_model, "best_lstm_model.keras")
   cat("Best model saved to best_lstm_model.keras\n")
-  
+
   # ============================================================
   # 2f) Evaluate the best model on the test set
   # ============================================================
   cat("\n--- Test Set Evaluation:", best_name, "---\n")
-  
-  test_eval  <- best_model |> evaluate(x_test, y_test, verbose = 0)
+
+  test_eval <- best_model |> evaluate(x_test, y_test, verbose = 0)
   test_probs <- best_model |> predict(x_test, verbose = 0)
   test_preds <- apply(test_probs, 1, which.max) - 1L
-  
-  test_acc   <- round(as.numeric(test_eval[["sparse_categorical_accuracy"]]), 4)
-  test_mae   <- round(as.numeric(test_eval[["ordinal_mae"]]), 4)
+
+  test_acc <- round(as.numeric(test_eval[["sparse_categorical_accuracy"]]), 4)
+  test_mae <- round(as.numeric(test_eval[["ordinal_mae"]]), 4)
   test_kappa <- compute_weighted_kappa(y_test, test_preds)
-  
-  cat("  Accuracy       :", test_acc,   "\n")
-  cat("  Ordinal MAE    :", test_mae,   "\n")
+
+  cat("  Accuracy       :", test_acc, "\n")
+  cat("  Ordinal MAE    :", test_mae, "\n")
   cat("  Weighted Kappa :", test_kappa, "\n")
-  
+
   test_cm <- table(Actual = y_test, Predicted = test_preds)
-  
+
   cat("\nConfusion Matrix:\n")
   print(test_cm)
-  
+
   cat("\nPer-class accuracy:\n")
   print(round(diag(test_cm) / rowSums(test_cm), 3))
-  
+
   # ============================================================
   # 2g) Save LSTM results
   # ============================================================
@@ -607,43 +910,41 @@ if (F) {
     test_kappa,
     file = "lstm_results.RData"
   )
-  
+
   cat("\nResults saved to lstm_results.RData\n")
-  
 } else {
-  
   # ============================================================
   # 3a) Load saved model and results
   # ============================================================
   cat("\n--- Loading saved LSTM model and results ---\n")
-  
+
   best_model <- load_model(
     "best_lstm_model.keras",
     custom_objects = list(ordinal_mae = metric_ordinal_mae)
   )
   load("lstm_results.RData")
-  
+
   cat("Loaded best model:", best_name, "\n")
   cat("Loaded results from lstm_results.RData\n")
-  
+
   # ============================================================
   # 3b) Reprint saved outputs
   # ============================================================
   cat("\n========== Parameter Count Summary ==========\n")
   print(param_table, row.names = FALSE)
-  
+
   cat("\n========== Validation Comparison ==========\n")
   print(val_results, row.names = FALSE)
   cat("===========================================\n")
-  
+
   cat("\n--- Saved Test Results ---\n")
-  cat("  Accuracy       :", test_acc,   "\n")
-  cat("  Ordinal MAE    :", test_mae,   "\n")
+  cat("  Accuracy       :", test_acc, "\n")
+  cat("  Ordinal MAE    :", test_mae, "\n")
   cat("  Weighted Kappa :", test_kappa, "\n")
-  
+
   cat("\nConfusion Matrix:\n")
   print(test_cm)
-  
+
   cat("\nPer-class accuracy:\n")
   print(round(diag(test_cm) / rowSums(test_cm), 3))
 }
