@@ -263,7 +263,7 @@ metric_ordinal_mae <- custom_metric(
 
     # Keep original version of y_true handling
     y_true_class <- op_cast(y_true, "float32")
-    
+
     # Mean absolute difference between class indices
     op_mean(op_abs(y_true_class - y_pred_class))
   }
@@ -548,6 +548,8 @@ if (F) {
   
   set.seed(123)
 
+  set.seed(123)
+
   ff_best_model <- ff_builders[[ff_best_name]]()
   compile_model(ff_best_model)
 
@@ -643,6 +645,193 @@ if (F) {
   print(round(diag(ff_test_cm) / rowSums(ff_test_cm), 3))
 }
 
+# ============================================================
+# 4) Generate plots and tables
+# ============================================================
+
+################################################################################
+# Validation results table
+ff_gt <- ff_val_results %>%
+  arrange(desc(Val_Kappa), Val_OrdMAE, desc(Val_Acc)) %>%
+  gt() %>%
+  cols_label(
+    Model       = "Model",
+    Val_Kappa   = "Weighted Kappa",
+    Val_OrdMAE  = "Ordinal MAE",
+    Val_Acc     = "Accuracy"
+  ) %>%
+  fmt_number(
+    columns = c(Val_Kappa, Val_OrdMAE, Val_Acc),
+    decimals = 4
+  ) %>%
+  tab_header(
+    title = "Validation Performance of FF Models"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  )
+
+ff_gt
+
+ff_gt %>%
+  data_color(
+    columns = Val_Kappa,
+    fn = scales::col_numeric(
+      palette = c("#f7fbff", "#6baed6", "#08306b"),
+      domain = NULL
+    )
+  )
+
+################################################################################
+# Parameter count table
+ff_table_y <- ff_param_table %>%
+  arrange(Total_Params) %>%
+  gt() %>%
+  cols_label(
+    Model = "Model",
+    Total_Params = "Total Parameters"
+  ) %>%
+  fmt_number(
+    columns = Total_Params,
+    sep_mark = ",",
+    decimals = 0
+  ) %>%
+  tab_header(
+    title = "Parameter Counts for Candidate FF Architectures"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_column_labels(everything())
+  )
+
+ff_table_y
+
+################################################################################
+# Confusion matrix for best FF model
+ff_cm_df <- as.data.frame.matrix(ff_test_cm)
+
+ff_cm_gt <- ff_cm_df %>%
+  rownames_to_column(var = "Actual") %>%
+  gt() %>%
+  cols_label(
+    Actual = "Actual"
+  ) %>%
+  tab_header(
+    title = "Confusion Matrix for Final FF Model"
+  ) %>%
+  cols_align(
+    align = "center",
+    columns = everything()
+  ) %>%
+  fmt_number(
+    columns = -Actual,
+    decimals = 0
+  ) %>%
+  data_color(
+    columns = -Actual,
+    fn = scales::col_numeric(
+      palette = c("#f7fbff", "#6baed6", "#08306b"),
+      domain = NULL
+    )
+  )
+
+ff_cm_gt %>%
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_body(
+      rows = Actual == colnames(ff_cm_df),
+      columns = -Actual
+    )
+  )
+
+ff_cm_gt
+
+################################################################################
+# Best FF model train/validation plot
+
+# Use FF objects
+history_plot <- ff_histories[[ff_best_name]]
+
+# Build data frame
+ff_df <- data.frame(
+  epoch    = seq_along(history_plot$metrics$loss),
+  loss     = history_plot$metrics$loss,
+  val_loss = history_plot$metrics$val_loss,
+  acc      = history_plot$metrics$sparse_categorical_accuracy,
+  val_acc  = history_plot$metrics$val_sparse_categorical_accuracy,
+  mae      = history_plot$metrics$ordinal_mae,
+  val_mae  = history_plot$metrics$val_ordinal_mae
+)
+
+# Common theme
+ff_plot_theme <- theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 12, hjust = 0.5),
+    axis.title = element_text(face = "bold"),
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    panel.grid.minor = element_blank(),
+    strip.text = element_text(face = "bold")
+  )
+
+# Accuracy panel
+ff_plot_acc <- ggplot(ff_df, aes(x = epoch)) +
+  geom_line(aes(y = acc, color = "Training"), linewidth = 1) +
+  geom_line(aes(y = val_acc, color = "Validation"), linewidth = 1) +
+  labs(
+    title = "Accuracy",
+    x = "Epoch",
+    y = "Accuracy"
+  ) +
+  scale_color_manual(values = c("Training" = "#1f77b4", "Validation" = "#d62728")) +
+  ff_plot_theme
+
+# Loss panel
+ff_plot_loss <- ggplot(ff_df, aes(x = epoch)) +
+  geom_line(aes(y = loss, color = "Training"), linewidth = 1) +
+  geom_line(aes(y = val_loss, color = "Validation"), linewidth = 1) +
+  labs(
+    title = "Loss",
+    x = "Epoch",
+    y = "Loss"
+  ) +
+  scale_color_manual(values = c("Training" = "#1f77b4", "Validation" = "#d62728")) +
+  ff_plot_theme
+
+# Ordinal MAE panel
+ff_plot_mae <- ggplot(ff_df, aes(x = epoch)) +
+  geom_line(aes(y = mae, color = "Training"), linewidth = 1) +
+  geom_line(aes(y = val_mae, color = "Validation"), linewidth = 1) +
+  labs(
+    title = "Ordinal MAE",
+    x = "Epoch",
+    y = "Ordinal MAE"
+  ) +
+  scale_color_manual(values = c("Training" = "#1f77b4", "Validation" = "#d62728")) +
+  ff_plot_theme
+
+# Combine into final figure
+ff_final_fig <- (ff_plot_acc / ff_plot_loss / ff_plot_mae) +
+  plot_annotation(
+    title = "Training and Validation Performance of the Stacked FF Model with Dropout",
+    theme = theme(
+      plot.title = element_text(face = "bold", size = 14, hjust = 0.5)
+    )
+  )
+
+ff_final_fig
+
+ggsave("ff_training_curves.png", ff_final_fig, width = 10, height = 10, dpi = 300)
+
 ###############################################################################
 # SECTION C — RNN MODEL
 ###############################################################################
@@ -735,87 +924,86 @@ rnn_builders <- list(
 # ============================================================
 
 if (F) {
-  
   # ============================================================
   # 2a) Print model summaries
   # ============================================================
   cat("========== RNN Model Architecture Summaries ==========\n")
-  
+
   rnn_param_table <- lapply(names(rnn_builders), function(nm) {
     model <- rnn_builders[[nm]]()
     compile_model(model)
-    
+
     dummy <- matrix(1L, nrow = 1, ncol = maxlen)
     invisible(model(dummy))
-    
+
     cat("\n---", nm, "---\n")
     summary(model)
-    
+
     data.frame(
       Model = nm,
       Total_Params = as.integer(count_params(model)),
       stringsAsFactors = FALSE
     )
   })
-  
+
   rnn_param_table <- do.call(rbind, rnn_param_table)
-  
+
   cat("\n========== RNN Parameter Count Summary ==========\n")
   print(rnn_param_table, row.names = FALSE)
-  
+
   # ============================================================
   # 2b) Train all RNN models
   # ============================================================
   set.seed(123)
-  
+
   rnn_histories <- list()
   rnn_models <- list()
-  
+
   for (nm in names(rnn_builders)) {
     cat("\n--- Training:", nm, "---\n")
-    
+
     model <- rnn_builders[[nm]]()
     compile_model(model)
-    
+
     rnn_histories[[nm]] <- model |> fit(
       x_train_model, y_train_model,
-      epochs          = epochs,
-      batch_size      = batch_size,
+      epochs = epochs,
+      batch_size = batch_size,
       validation_data = list(x_val, y_val),
-      verbose         = 1,
+      verbose = 1,
     )
-    
+
     rnn_models[[nm]] <- model
   }
-  
+
   # ============================================================
   # 2c) Compare validation performance
   # ============================================================
   rnn_val_results <- do.call(rbind, lapply(names(rnn_models), function(nm) {
     val_probs <- rnn_models[[nm]] |> predict(x_val, verbose = 0)
     val_preds <- apply(val_probs, 1, which.max) - 1L
-    
+
     data.frame(
-      Model      = nm,
-      Val_Kappa  = compute_weighted_kappa(y_val, val_preds),
+      Model = nm,
+      Val_Kappa = compute_weighted_kappa(y_val, val_preds),
       Val_OrdMAE = final_val(rnn_histories[[nm]], "val_ordinal_mae"),
-      Val_Acc    = final_val(rnn_histories[[nm]], "val_sparse_categorical_accuracy"),
+      Val_Acc = final_val(rnn_histories[[nm]], "val_sparse_categorical_accuracy"),
       stringsAsFactors = FALSE
     )
   }))
-  
+
   cat("\n========== RNN Validation Comparison ==========\n")
   print(rnn_val_results, row.names = FALSE)
   cat("==============================================\n")
-  
+
   # ============================================================
   # 2d) Select the best RNN model
   # ============================================================
   # Rank models by kappa (primary), then ordinal MAE, then accuracy
   rnn_val_results$rank_kappa <- rank(-rnn_val_results$Val_Kappa, ties.method = "first")
-  rnn_val_results$rank_mae   <- rank(rnn_val_results$Val_OrdMAE, ties.method = "first")
-  rnn_val_results$rank_acc   <- rank(-rnn_val_results$Val_Acc, ties.method = "first")
-  
+  rnn_val_results$rank_mae <- rank(rnn_val_results$Val_OrdMAE, ties.method = "first")
+  rnn_val_results$rank_acc <- rank(-rnn_val_results$Val_Acc, ties.method = "first")
+
   rnn_val_results <- rnn_val_results[
     order(
       rnn_val_results$rank_kappa,
@@ -823,60 +1011,60 @@ if (F) {
       rnn_val_results$rank_acc
     ),
   ]
-  
+
   rnn_best_name <- rnn_val_results$Model[1]
-  
+
   cat("\nBest RNN model:", rnn_best_name, "\n")
   cat("  Validation Kappa  :", rnn_val_results$Val_Kappa[1], "\n")
   cat("  Validation OrdMAE :", rnn_val_results$Val_OrdMAE[1], "\n")
   cat("  Validation Acc    :", rnn_val_results$Val_Acc[1], "\n")
-  
+
   rnn_val_results <- rnn_val_results[, c("Model", "Val_Kappa", "Val_OrdMAE", "Val_Acc")]
-  
+
   # ============================================================
   # 2e) Retrain best model on full training set
   # ============================================================
   cat("\n--- Retraining best RNN model (", rnn_best_name, ") ---\n")
-  
+
   set.seed(123)
-  
+
   rnn_best_model <- rnn_builders[[rnn_best_name]]()
   compile_model(rnn_best_model)
-  
+
   rnn_history_best <- rnn_best_model |> fit(
     x_train, y_train,
-    epochs     = epochs,
+    epochs = epochs,
     batch_size = batch_size,
-    verbose    = 1
+    verbose = 1
   )
-  
+
   save_model(rnn_best_model, "best_rnn_model.keras")
   cat("Best RNN model saved to best_rnn_model.keras\n")
-  
+
   # ============================================================
   # 2f) Evaluate on test set
   # ============================================================
-  rnn_test_eval  <- rnn_best_model |> evaluate(x_test, y_test, verbose = 0)
+  rnn_test_eval <- rnn_best_model |> evaluate(x_test, y_test, verbose = 0)
   rnn_test_probs <- rnn_best_model |> predict(x_test, verbose = 0)
   rnn_test_preds <- apply(rnn_test_probs, 1, which.max) - 1L
-  
-  rnn_test_acc   <- round(as.numeric(rnn_test_eval[["sparse_categorical_accuracy"]]), 4)
-  rnn_test_mae   <- round(as.numeric(rnn_test_eval[["ordinal_mae"]]), 4)
+
+  rnn_test_acc <- round(as.numeric(rnn_test_eval[["sparse_categorical_accuracy"]]), 4)
+  rnn_test_mae <- round(as.numeric(rnn_test_eval[["ordinal_mae"]]), 4)
   rnn_test_kappa <- compute_weighted_kappa(y_test, rnn_test_preds)
-  
+
   cat("\n--- RNN Test Results ---\n")
   cat("Accuracy:", rnn_test_acc, "\n")
   cat("MAE:", rnn_test_mae, "\n")
   cat("Kappa:", rnn_test_kappa, "\n")
-  
+
   rnn_test_cm <- table(Actual = y_test, Predicted = rnn_test_preds)
-  
+
   cat("\nConfusion Matrix:\n")
   print(rnn_test_cm)
-  
+
   cat("\nPer-class accuracy:\n")
   print(round(diag(rnn_test_cm) / rowSums(rnn_test_cm), 3))
-  
+
   # ============================================================
   # 2g) Save results
   # ============================================================
@@ -895,43 +1083,41 @@ if (F) {
     rnn_test_kappa,
     file = "rnn_results.RData"
   )
-  
+
   cat("\nRNN results saved to rnn_results.RData\n")
-  
 } else {
-  
   # ============================================================
   # Load saved model and results
   # ============================================================
   cat("\n--- Loading saved RNN model and results ---\n")
-  
+
   rnn_best_model <- load_model(
     "best_rnn_model.keras",
     custom_objects = list(ordinal_mae = metric_ordinal_mae)
   )
   load("rnn_results.RData")
-  
+
   cat("Loaded best RNN model:", rnn_best_name, "\n")
   cat("Loaded results from rnn_results.RData\n")
-  
+
   # ============================================================
   # Reprint saved outputs
   # ============================================================
   cat("\n========== RNN Parameter Count Summary ==========\n")
   print(rnn_param_table, row.names = FALSE)
-  
+
   cat("\n========== RNN Validation Comparison ==========\n")
   print(rnn_val_results, row.names = FALSE)
   cat("==============================================\n")
-  
+
   cat("\n--- Saved RNN Test Results ---\n")
   cat("  Accuracy       :", rnn_test_acc, "\n")
   cat("  Ordinal MAE    :", rnn_test_mae, "\n")
   cat("  Weighted Kappa :", rnn_test_kappa, "\n")
-  
+
   cat("\nConfusion Matrix:\n")
   print(rnn_test_cm)
-  
+
   cat("\nPer-class accuracy:\n")
   print(round(diag(rnn_test_cm) / rowSums(rnn_test_cm), 3))
 }
@@ -954,10 +1140,10 @@ rnn_df <- data.frame(
 
 rnn_pub_theme <- theme_minimal(base_size = 12) +
   theme(
-    plot.title      = element_text(face = "bold", hjust = 0.5),
-    axis.title      = element_text(face = "bold"),
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold"),
     legend.position = "bottom",
-    legend.title    = element_blank(),
+    legend.title = element_blank(),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
     axis.line = element_line(color = "black")
@@ -988,10 +1174,11 @@ rnn_p_mae <- ggplot(rnn_df, aes(epoch)) +
   rnn_pub_theme
 
 rnn_final_fig <- (rnn_p_acc / rnn_p_loss / rnn_p_mae) +
-  plot_annotation(title = "Training and Validation Performance of the Baseline Single Layer RNN Model",
-                  theme = theme(
-                    plot.title = element_text(face = "bold", size = 14, hjust = 0.5)
-                  )
+  plot_annotation(
+    title = "Training and Validation Performance of the Baseline Single Layer RNN Model",
+    theme = theme(
+      plot.title = element_text(face = "bold", size = 14, hjust = 0.5)
+    )
   )
 rnn_final_fig
 
@@ -1124,9 +1311,9 @@ if (F) {
   # 2b) Train all four models
   # ============================================================
   # All models use the same global stratified validation set.
-  
+
   set.seed(123)
-  
+
   histories <- list()
   models <- list()
 
@@ -1138,10 +1325,10 @@ if (F) {
 
     histories[[nm]] <- model |> fit(
       x_train_model, y_train_model,
-      epochs          = epochs,
-      batch_size      = batch_size,
+      epochs = epochs,
+      batch_size = batch_size,
       validation_data = list(x_val, y_val),
-      verbose         = 1
+      verbose = 1
     )
 
     models[[nm]] <- model
@@ -1154,7 +1341,7 @@ if (F) {
   # 1. highest validation weighted kappa
   # 2. lowest validation ordinal MAE
   # 3. highest validation accuracy
-  
+
   val_results <- do.call(rbind, lapply(names(models), function(nm) {
     val_probs <- models[[nm]] |> predict(x_val, verbose = 0)
     val_preds <- apply(val_probs, 1, which.max) - 1L
@@ -1197,9 +1384,9 @@ if (F) {
   # 2e) Retrain the best model on the full training set
   # ============================================================
   cat("\n--- Retraining best model (", best_name, ") on full training set ---\n")
-  
+
   set.seed(123)
-  
+
   best_model <- builders[[best_name]]()
   compile_model(best_model)
 
@@ -1304,28 +1491,23 @@ if (F) {
 lstm_gt <- val_results %>%
   arrange(desc(Val_Kappa), Val_OrdMAE, desc(Val_Acc)) %>%
   gt() %>%
-  
   cols_label(
     Model       = "Model",
     Val_Kappa   = "Weighted Kappa",
     Val_OrdMAE  = "Ordinal MAE",
     Val_Acc     = "Accuracy"
   ) %>%
-  
   fmt_number(
     columns = c(Val_Kappa, Val_OrdMAE, Val_Acc),
     decimals = 4
   ) %>%
-  
   tab_header(
     title = "Validation Performance of LSTM Models"
   ) %>%
-  
   cols_align(
     align = "center",
     columns = everything()
   ) %>%
-  
   tab_style(
     style = cell_text(weight = "bold"),
     locations = cells_column_labels(everything())
@@ -1379,25 +1561,20 @@ cm_df <- as.data.frame.matrix(test_cm)
 cm_gt <- cm_df %>%
   rownames_to_column(var = "Actual") %>%
   gt() %>%
-  
   cols_label(
     Actual = "Actual"
   ) %>%
-  
   tab_header(
     title = "Confusion Matrix for Final LSTM Model"
   ) %>%
-  
   cols_align(
     align = "center",
     columns = everything()
   ) %>%
-  
   fmt_number(
     columns = -Actual,
     decimals = 0
   ) %>%
-  
   data_color(
     columns = -Actual,
     fn = scales::col_numeric(
@@ -1433,10 +1610,10 @@ df <- data.frame(
 # Common theme
 pub_theme <- theme_minimal(base_size = 12) +
   theme(
-    plot.title      = element_text(face = "bold", hjust = 0.5),
-    axis.title      = element_text(face = "bold"),
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold"),
     legend.position = "bottom",
-    legend.title    = element_blank(),
+    legend.title = element_blank(),
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
     axis.line = element_line(color = "black")
