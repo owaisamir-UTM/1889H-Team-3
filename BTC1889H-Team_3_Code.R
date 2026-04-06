@@ -1195,8 +1195,8 @@ ggsave("rnn_training_curves.png", rnn_final_fig, width = 10, height = 10, dpi = 
 
 # Baseline:
 # Embedding -> LSTM -> Dense(softmax)
-build_baseline <- function() {
-  keras_model_sequential(name = "baseline") |>
+build_lstm_baseline <- function() {
+  keras_model_sequential(name = "lstm_baseline") |>
     layer_embedding(
       input_dim    = num_words,
       output_dim   = embedding_dim,
@@ -1208,8 +1208,8 @@ build_baseline <- function() {
 
 # Baseline + Dropout:
 # Embedding -> LSTM(dropout) -> Dropout -> Dense(softmax)
-build_baseline_dropout <- function() {
-  keras_model_sequential(name = "baseline_dropout") |>
+build_lstm_baseline_dropout <- function() {
+  keras_model_sequential(name = "lstm_baseline_dropout") |>
     layer_embedding(
       input_dim    = num_words,
       output_dim   = embedding_dim,
@@ -1226,8 +1226,8 @@ build_baseline_dropout <- function() {
 
 # Stacked:
 # Embedding -> LSTM(return_sequences = TRUE) -> LSTM -> Dense(softmax)
-build_stacked <- function() {
-  keras_model_sequential(name = "stacked") |>
+build_lstm_stacked <- function() {
+  keras_model_sequential(name = "lstm_stacked") |>
     layer_embedding(
       input_dim    = num_words,
       output_dim   = embedding_dim,
@@ -1246,8 +1246,8 @@ build_stacked <- function() {
 #           -> LSTM(dropout, recurrent_dropout)
 #           -> Dropout
 #           -> Dense(softmax)
-build_stacked_dropout <- function() {
-  keras_model_sequential(name = "stacked_dropout") |>
+build_lstm_stacked_dropout <- function() {
+  keras_model_sequential(name = "lstm_stacked_dropout") |>
     layer_embedding(
       input_dim    = num_words,
       output_dim   = embedding_dim,
@@ -1268,11 +1268,11 @@ build_stacked_dropout <- function() {
     layer_dense(units = num_classes, activation = "softmax")
 }
 
-builders <- list(
-  baseline         = build_baseline,
-  baseline_dropout = build_baseline_dropout,
-  stacked          = build_stacked,
-  stacked_dropout  = build_stacked_dropout
+lstm_builders <- list(
+  lstm_baseline         = build_lstm_baseline,
+  lstm_baseline_dropout = build_lstm_baseline_dropout,
+  lstm_stacked          = build_lstm_stacked,
+  lstm_stacked_dropout  = build_lstm_stacked_dropout
 )
 
 # ============================================================
@@ -1283,58 +1283,58 @@ if (F) {
   # ============================================================
   # 2a) Print model summaries
   # ============================================================
-  cat("========== Model Architecture Summaries ==========\n")
-
-  param_table <- lapply(names(builders), function(nm) {
-    model <- builders[[nm]]()
-    compile_model(model)
-
+  cat("========== LSTM Model Architecture Summaries ==========\n")
+  
+  lstm_param_table <- lapply(names(lstm_builders), function(nm) {
+    lstm_model <- lstm_builders[[nm]]()
+    compile_model(lstm_model)
+    
     # Force model to build before printing summary
     dummy <- matrix(1L, nrow = 1, ncol = maxlen)
-    invisible(model(dummy))
-
+    invisible(lstm_model(dummy))
+    
     cat("\n---", nm, "---\n")
-    summary(model)
-
+    summary(lstm_model)
+    
     data.frame(
       Model = nm,
-      Total_Params = as.integer(count_params(model)),
+      Total_Params = as.integer(count_params(lstm_model)),
       stringsAsFactors = FALSE
     )
   })
-
-  param_table <- do.call(rbind, param_table)
-
-  cat("\n========== Parameter Count Summary ==========\n")
-  print(param_table, row.names = FALSE)
-
+  
+  lstm_param_table <- do.call(rbind, lstm_param_table)
+  
+  cat("\n========== LSTM Parameter Count Summary ==========\n")
+  print(lstm_param_table, row.names = FALSE)
+  
   # ============================================================
   # 2b) Train all four models
   # ============================================================
   # All models use the same global stratified validation set.
-
+  
   set.seed(123)
-
-  histories <- list()
-  models <- list()
-
-  for (nm in names(builders)) {
+  
+  lstm_histories <- list()
+  lstm_models <- list()
+  
+  for (nm in names(lstm_builders)) {
     cat("\n--- Training:", nm, "---\n")
-
-    model <- builders[[nm]]()
-    compile_model(model)
-
-    histories[[nm]] <- model |> fit(
+    
+    lstm_model <- lstm_builders[[nm]]()
+    compile_model(lstm_model)
+    
+    lstm_histories[[nm]] <- lstm_model |> fit(
       x_train_model, y_train_model,
       epochs = epochs,
       batch_size = batch_size,
       validation_data = list(x_val, y_val),
       verbose = 1
     )
-
-    models[[nm]] <- model
+    
+    lstm_models[[nm]] <- lstm_model
   }
-
+  
   # ============================================================
   # 2c) Compare validation performance
   # ============================================================
@@ -1342,145 +1342,149 @@ if (F) {
   # 1. highest validation weighted kappa
   # 2. lowest validation ordinal MAE
   # 3. highest validation accuracy
-
-  val_results <- do.call(rbind, lapply(names(models), function(nm) {
-    val_probs <- models[[nm]] |> predict(x_val, verbose = 0)
+  
+  lstm_val_results <- do.call(rbind, lapply(names(lstm_models), function(nm) {
+    val_probs <- lstm_models[[nm]] |> predict(x_val, verbose = 0)
     val_preds <- apply(val_probs, 1, which.max) - 1L
-
+    
     data.frame(
       Model = nm,
       Val_Kappa = compute_weighted_kappa(y_val, val_preds),
-      Val_OrdMAE = final_val(histories[[nm]], "val_ordinal_mae"),
-      Val_Acc = final_val(histories[[nm]], "val_sparse_categorical_accuracy"),
+      Val_OrdMAE = final_val(lstm_histories[[nm]], "val_ordinal_mae"),
+      Val_Acc = final_val(lstm_histories[[nm]], "val_sparse_categorical_accuracy"),
       stringsAsFactors = FALSE
     )
   }))
-
-  cat("\n========== Validation Comparison ==========\n")
-  print(val_results, row.names = FALSE)
+  
+  cat("\n========== LSTM Validation Comparison ==========\n")
+  print(lstm_val_results, row.names = FALSE)
   cat("===========================================\n")
-
+  
   # ============================================================
   # 2d) Select the best model
   # ============================================================
-  val_results$rank_kappa <- rank(-val_results$Val_Kappa, ties.method = "first")
-  val_results$rank_mae <- rank(val_results$Val_OrdMAE, ties.method = "first")
-  val_results$rank_acc <- rank(-val_results$Val_Acc, ties.method = "first")
-
-  val_results <- val_results[
-    order(val_results$rank_kappa, val_results$rank_mae, val_results$rank_acc),
+  lstm_val_results$rank_kappa <- rank(-lstm_val_results$Val_Kappa, ties.method = "first")
+  lstm_val_results$rank_mae <- rank(lstm_val_results$Val_OrdMAE, ties.method = "first")
+  lstm_val_results$rank_acc <- rank(-lstm_val_results$Val_Acc, ties.method = "first")
+  
+  lstm_val_results <- lstm_val_results[
+    order(
+      lstm_val_results$rank_kappa,
+      lstm_val_results$rank_mae,
+      lstm_val_results$rank_acc
+    ),
   ]
-
-  best_name <- val_results$Model[1]
-
-  cat("\nBest model:", best_name, "\n")
-  cat("  Validation Kappa  :", val_results$Val_Kappa[1], "\n")
-  cat("  Validation OrdMAE :", val_results$Val_OrdMAE[1], "\n")
-  cat("  Validation Acc    :", val_results$Val_Acc[1], "\n")
-
+  
+  lstm_best_name <- lstm_val_results$Model[1]
+  
+  cat("\nBest LSTM model:", lstm_best_name, "\n")
+  cat("  Validation Kappa  :", lstm_val_results$Val_Kappa[1], "\n")
+  cat("  Validation OrdMAE :", lstm_val_results$Val_OrdMAE[1], "\n")
+  cat("  Validation Acc    :", lstm_val_results$Val_Acc[1], "\n")
+  
   # Keep only the main comparison columns
-  val_results <- val_results[, c("Model", "Val_Kappa", "Val_OrdMAE", "Val_Acc")]
-
+  lstm_val_results <- lstm_val_results[, c("Model", "Val_Kappa", "Val_OrdMAE", "Val_Acc")]
+  
   # ============================================================
   # 2e) Retrain the best model on the full training set
   # ============================================================
-  cat("\n--- Retraining best model (", best_name, ") on full training set ---\n")
-
+  cat("\n--- Retraining best LSTM model (", lstm_best_name, ") on full training set ---\n")
+  
   set.seed(123)
-
-  best_model <- builders[[best_name]]()
-  compile_model(best_model)
-
-  history_best <- best_model |> fit(
+  
+  lstm_best_model <- lstm_builders[[lstm_best_name]]()
+  compile_model(lstm_best_model)
+  
+  lstm_history_best <- lstm_best_model |> fit(
     x_train, y_train,
     epochs = epochs,
     batch_size = batch_size,
     verbose = 1
   )
-
-  save_model(best_model, "best_lstm_model.keras")
-  cat("Best model saved to best_lstm_model.keras\n")
-
+  
+  save_model(lstm_best_model, "best_lstm_model.keras")
+  cat("Best LSTM model saved to best_lstm_model.keras\n")
+  
   # ============================================================
   # 2f) Evaluate the best model on the test set
   # ============================================================
-  cat("\n--- Test Set Evaluation:", best_name, "---\n")
-
-  test_eval <- best_model |> evaluate(x_test, y_test, verbose = 0)
-  test_probs <- best_model |> predict(x_test, verbose = 0)
-  test_preds <- apply(test_probs, 1, which.max) - 1L
-
-  test_acc <- round(as.numeric(test_eval[["sparse_categorical_accuracy"]]), 4)
-  test_mae <- round(as.numeric(test_eval[["ordinal_mae"]]), 4)
-  test_kappa <- compute_weighted_kappa(y_test, test_preds)
-
-  cat("  Accuracy       :", test_acc, "\n")
-  cat("  Ordinal MAE    :", test_mae, "\n")
-  cat("  Weighted Kappa :", test_kappa, "\n")
-
-  test_cm <- table(Actual = y_test, Predicted = test_preds)
-
+  cat("\n--- Test Set Evaluation:", lstm_best_name, "---\n")
+  
+  lstm_test_eval <- lstm_best_model |> evaluate(x_test, y_test, verbose = 0)
+  lstm_test_probs <- lstm_best_model |> predict(x_test, verbose = 0)
+  lstm_test_preds <- apply(lstm_test_probs, 1, which.max) - 1L
+  
+  lstm_test_acc <- round(as.numeric(lstm_test_eval[["sparse_categorical_accuracy"]]), 4)
+  lstm_test_mae <- round(as.numeric(lstm_test_eval[["ordinal_mae"]]), 4)
+  lstm_test_kappa <- compute_weighted_kappa(y_test, lstm_test_preds)
+  
+  cat("  Accuracy       :", lstm_test_acc, "\n")
+  cat("  Ordinal MAE    :", lstm_test_mae, "\n")
+  cat("  Weighted Kappa :", lstm_test_kappa, "\n")
+  
+  lstm_test_cm <- table(Actual = y_test, Predicted = lstm_test_preds)
+  
   cat("\nConfusion Matrix:\n")
-  print(test_cm)
-
+  print(lstm_test_cm)
+  
   cat("\nPer-class accuracy:\n")
-  print(round(diag(test_cm) / rowSums(test_cm), 3))
-
+  print(round(diag(lstm_test_cm) / rowSums(lstm_test_cm), 3))
+  
   # ============================================================
   # 2g) Save LSTM results
   # ============================================================
   save(
-    param_table,
-    histories,
-    val_results,
-    best_name,
-    history_best,
-    test_eval,
-    test_probs,
-    test_preds,
-    test_cm,
-    test_acc,
-    test_mae,
-    test_kappa,
+    lstm_param_table,
+    lstm_histories,
+    lstm_val_results,
+    lstm_best_name,
+    lstm_history_best,
+    lstm_test_eval,
+    lstm_test_probs,
+    lstm_test_preds,
+    lstm_test_cm,
+    lstm_test_acc,
+    lstm_test_mae,
+    lstm_test_kappa,
     file = "lstm_results.RData"
   )
-
-  cat("\nResults saved to lstm_results.RData\n")
+  
+  cat("\nLSTM results saved to lstm_results.RData\n")
 } else {
   # ============================================================
   # 3a) Load saved model and results
   # ============================================================
   cat("\n--- Loading saved LSTM model and results ---\n")
-
-  best_model <- load_model(
+  
+  lstm_best_model <- load_model(
     "best_lstm_model.keras",
     custom_objects = list(ordinal_mae = metric_ordinal_mae)
   )
   load("lstm_results.RData")
-
-  cat("Loaded best model:", best_name, "\n")
+  
+  cat("Loaded best LSTM model:", lstm_best_name, "\n")
   cat("Loaded results from lstm_results.RData\n")
-
+  
   # ============================================================
   # 3b) Reprint saved outputs
   # ============================================================
-  cat("\n========== Parameter Count Summary ==========\n")
-  print(param_table, row.names = FALSE)
-
-  cat("\n========== Validation Comparison ==========\n")
-  print(val_results, row.names = FALSE)
+  cat("\n========== LSTM Parameter Count Summary ==========\n")
+  print(lstm_param_table, row.names = FALSE)
+  
+  cat("\n========== LSTM Validation Comparison ==========\n")
+  print(lstm_val_results, row.names = FALSE)
   cat("===========================================\n")
-
+  
   cat("\n--- Saved Test Results ---\n")
-  cat("  Accuracy       :", test_acc, "\n")
-  cat("  Ordinal MAE    :", test_mae, "\n")
-  cat("  Weighted Kappa :", test_kappa, "\n")
-
+  cat("  Accuracy       :", lstm_test_acc, "\n")
+  cat("  Ordinal MAE    :", lstm_test_mae, "\n")
+  cat("  Weighted Kappa :", lstm_test_kappa, "\n")
+  
   cat("\nConfusion Matrix:\n")
-  print(test_cm)
-
+  print(lstm_test_cm)
+  
   cat("\nPer-class accuracy:\n")
-  print(round(diag(test_cm) / rowSums(test_cm), 3))
+  print(round(diag(lstm_test_cm) / rowSums(lstm_test_cm), 3))
 }
 
 # ============================================================
@@ -1489,7 +1493,7 @@ if (F) {
 
 ################################################################################
 # Validation results table
-lstm_gt <- val_results %>%
+lstm_gt <- lstm_val_results %>%
   arrange(desc(Val_Kappa), Val_OrdMAE, desc(Val_Acc)) %>%
   gt() %>%
   cols_label(
@@ -1527,7 +1531,7 @@ lstm_gt %>%
 
 ################################################################################
 # Parameter count table
-table_y <- param_table %>%
+table_y <- lstm_param_table %>%
   arrange(Total_Params) %>%
   gt() %>%
   cols_label(
@@ -1555,9 +1559,9 @@ table_y
 
 ################################################################################
 # Confusion matrix for best model
-test_cm <- table(Actual = y_test, Predicted = test_preds)
+lstm_test_cm <- table(Actual = y_test, Predicted = lstm_test_preds)
 
-cm_df <- as.data.frame.matrix(test_cm)
+cm_df <- as.data.frame.matrix(lstm_test_cm)
 
 cm_gt <- cm_df %>%
   rownames_to_column(var = "Actual") %>%
@@ -1583,19 +1587,12 @@ cm_gt <- cm_df %>%
       domain = NULL
     )
   )
-cm_gt %>%
-  tab_style(
-    style = cell_text(weight = "bold"),
-    locations = cells_body(
-      rows = Actual == colnames(cm_df),
-      columns = -Actual
-    )
-  )
+
 cm_gt
 
 ################################################################################
 # Best model train/validation plot
-history_plot <- histories[[best_name]]
+history_plot <- lstm_histories[[lstm_best_name]]
 
 # Build data frame
 df <- data.frame(
